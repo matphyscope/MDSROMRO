@@ -52,7 +52,8 @@ def analyze_single(path, CM, rep, *, type_map, prod, stride, args):
     traj = core.select_frames(core.load(path, type_map=type_map, frames="all"),
                               frame_range=prod, stride=stride)
     sp = core.species_of(traj)
-    pairs = [p for p in core.unique_pairs(sp) if CM.get(*p) > 0]
+    all_pairs = core.unique_pairs(sp)              # g(r): EVERY pair (bonded or not)
+    bonded = [p for p in all_pairs if CM.get(*p) > 0]  # info only
 
     comp = np.mean([[fr.count(e) / fr.n_atoms for e in sp] for fr in traj], axis=0)
     rho = np.mean([fr.mass_density() for fr in traj])
@@ -61,20 +62,24 @@ def analyze_single(path, CM, rep, *, type_map, prod, stride, args):
     rep.print("  composition mol%: " + ", ".join(f"{e} {c*100:.2f}" for e, c in zip(sp, comp)))
     rep.print(f"  mass density: {rho:.4f} g/cc")
 
-    # 1) partial g(r) -------------------------------------------------------
-    R = rdf.partial_rdf(traj, pairs=pairs, r_max=args.rmax, nbins=args.nbins,
+    # 1) partial g(r) — ALL pairs, including non-bonded (C-N, N-N show avoidance)
+    R = rdf.partial_rdf(traj, pairs=all_pairs, r_max=args.rmax, nbins=args.nbins,
                         n_blocks=args.nblocks)
-    fig, ax = plt.subplots(figsize=(7, 4.5))
+    fig, ax = plt.subplots(figsize=(7.5, 4.5))
     data = {"r": R["r"]}
-    rep.print("\n[g(r)] first-peak (r, height, FWHM):")
-    for (A, B) in pairs:
+    rep.print("\n[g(r)] first-peak (r, height, FWHM)   [* = non-bonded by potential]:")
+    for (A, B) in all_pairs:
         g = R[(A, B)]["g"]
-        ax.plot(R["r"], g, label=f"{A}-{B}")
+        nb = CM.get(A, B) <= 0
+        ax.plot(R["r"], g, label=f"{A}-{B}" + ("*" if nb else ""),
+                ls="--" if nb else "-")
         data[f"g_{A}{B}"] = g
         m = rdf.measure_peaks(R["r"], g, search=(0.8, None))
-        rep.print(f"  {A}-{B}: r={m['peak_r']:.3f} Å  h={m['height']:.2f}  FWHM={m['fwhm']:.3f}")
-    ax.set_xlabel("r (Å)"); ax.set_ylabel("g(r)"); ax.set_title(f"Partial g(r) — {Path(path).stem}")
-    ax.legend(); ax.grid(alpha=0.3)
+        rep.print(f"  {A}-{B}{'*' if nb else ' '}: r={m['peak_r']:.3f} Å  "
+                  f"h={m['height']:.2f}  FWHM={m['fwhm']:.3f}")
+    ax.set_xlabel("r (Å)"); ax.set_ylabel("g(r)")
+    ax.set_title(f"Partial g(r) — {Path(path).stem}  (dashed* = non-bonded)")
+    ax.legend(ncol=2); ax.grid(alpha=0.3)
     rep.save_fig(fig, "gr_partials", data=data); plt.close(fig)
 
     # 2) coordination numbers (stacked bar) ---------------------------------
@@ -202,17 +207,17 @@ def analyze_sweep(directory, CM, rep, *, type_map, prod, stride, args):
     fig.tight_layout()
     rep.save_fig(fig, "sweep_vs_T", data=sweep_data); plt.close(fig)
 
-    # g(r) overlay across temperature, one figure per pair
+    # g(r) overlay across temperature, one figure per pair (ALL pairs)
     sp0 = None
     grT = {}
     for d in dumps:
         traj = core.select_frames(core.load(d["path"], type_map=type_map, frames="all"),
                                   frame_range=prod, stride=stride * 4)
         sp0 = sp0 or core.species_of(traj)
-        pairs = [p for p in core.unique_pairs(sp0) if CM.get(*p) > 0]
-        R = rdf.partial_rdf(traj, pairs=pairs, r_max=args.rmax, nbins=args.nbins, n_blocks=1)
+        all_pairs = core.unique_pairs(sp0)
+        R = rdf.partial_rdf(traj, pairs=all_pairs, r_max=args.rmax, nbins=args.nbins, n_blocks=1)
         grT[d["label"]] = R
-    for (A, B) in pairs:
+    for (A, B) in all_pairs:
         fig, ax = plt.subplots(figsize=(7, 4.2))
         data = {"r": grT[dumps[0]["label"]]["r"]}
         for d in dumps:

@@ -1,17 +1,19 @@
 ========================================================================
 amorph 0.1.0 analyze: data/dump_T0300.lammpstrj
-generated 2026-06-07 13:09:51   ->  results/dump_T0300
+generated 2026-06-07 13:16:07   ->  results/dump_T0300
 ========================================================================
 
 [dump_T0300.lammpstrj] frames=101 atoms=997 species=['C', 'N', 'Si']
   composition mol%: C 34.00, N 20.86, Si 45.14
   mass density: 2.7251 g/cc
 
-[g(r)] first-peak (r, height, FWHM):
-  C-C: r=1.470 Å  h=19.51  FWHM=0.100
-  C-Si: r=1.830 Å  h=5.51  FWHM=0.150
-  N-Si: r=1.750 Å  h=20.91  FWHM=0.089
-  Si-Si: r=2.990 Å  h=6.56  FWHM=0.114
+[g(r)] first-peak (r, height, FWHM)   [* = non-bonded by potential]:
+  C-C : r=1.470 Å  h=19.51  FWHM=0.100
+  C-N*: r=2.830 Å  h=1.34  FWHM=0.942
+  C-Si : r=1.830 Å  h=5.51  FWHM=0.150
+  N-N*: r=2.850 Å  h=2.50  FWHM=0.737
+  N-Si : r=1.750 Å  h=20.91  FWHM=0.089
+  Si-Si : r=2.990 Å  h=6.56  FWHM=0.114
 [saved] results/dump_T0300/gr_partials.png
 [saved] results/dump_T0300/gr_partials.txt
 

@@ -1,6 +1,6 @@
 ========================================================================
 amorph 0.1.0 analyze: data/
-generated 2026-06-07 13:10:13   ->  results/sweep_data
+generated 2026-06-07 13:16:22   ->  results/sweep_data
 ========================================================================
 discovered 3 temperature dumps:
   300K           dump_T0300.lammpstrj
@@ -17,8 +17,12 @@ discovered 3 temperature dumps:
 [saved] results/sweep_data/sweep_vs_T.txt
 [saved] results/sweep_data/grT_CC.png
 [saved] results/sweep_data/grT_CC.txt
+[saved] results/sweep_data/grT_CN.png
+[saved] results/sweep_data/grT_CN.txt
 [saved] results/sweep_data/grT_CSi.png
 [saved] results/sweep_data/grT_CSi.txt
+[saved] results/sweep_data/grT_NN.png
+[saved] results/sweep_data/grT_NN.txt
 [saved] results/sweep_data/grT_NSi.png
 [saved] results/sweep_data/grT_NSi.txt
 [saved] results/sweep_data/grT_SiSi.png
