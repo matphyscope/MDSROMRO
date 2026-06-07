@@ -1,0 +1,46 @@
+========================================================================
+amorph 0.1.0 analyze: data/dump_T0300.lammpstrj
+generated 2026-06-07 13:09:51   ->  results/dump_T0300
+========================================================================
+
+[dump_T0300.lammpstrj] frames=101 atoms=997 species=['C', 'N', 'Si']
+  composition mol%: C 34.00, N 20.86, Si 45.14
+  mass density: 2.7251 g/cc
+
+[g(r)] first-peak (r, height, FWHM):
+  C-C: r=1.470 Å  h=19.51  FWHM=0.100
+  C-Si: r=1.830 Å  h=5.51  FWHM=0.150
+  N-Si: r=1.750 Å  h=20.91  FWHM=0.089
+  Si-Si: r=2.990 Å  h=6.56  FWHM=0.114
+[saved] results/dump_T0300/gr_partials.png
+[saved] results/dump_T0300/gr_partials.txt
+
+[CN] coordination numbers:
+  C: total 3.133±0.000
+  N: total 2.990±0.000
+  Si: total 4.204±0.003
+[saved] results/dump_T0300/coordination.png
+[saved] results/dump_T0300/coordination.txt
+[saved] results/dump_T0300/coordination_table.txt
+
+[ADF] bond-angle peaks:
+  C-C-C: 120.5°
+  C-C-Si: 119.5°
+  Si-C-Si: 119.5°
+  Si-N-Si: 119.5°
+  C-Si-C: 111.5°
+  C-Si-N: 110.5°
+  C-Si-Si: 105.5°
+  N-Si-N: 103.5°
+  N-Si-Si: 96.5°
+  Si-Si-Si: 112.5°
+[saved] results/dump_T0300/adf.png
+[saved] results/dump_T0300/adf.txt
+[saved] results/dump_T0300/rings.png
+[saved] results/dump_T0300/rings.txt
+
+[rings] 3:7, 4:33, 5:197, 6:284, 7:122, 8:16, 9:1
+[saved] results/dump_T0300/tetra_connectivity.png
+[saved] results/dump_T0300/tetra_connectivity.txt
+[tetra] Si: corner 96.9%, edge 3.1%, face 0.0%
+[clusters] free-C: n=70, isolated=33, graphenic=17, mean L_a=4.11 Å, max size=105

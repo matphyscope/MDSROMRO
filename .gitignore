@@ -10,7 +10,13 @@ tests/**/*.lammpstrj
 tests/*.data
 tests/*.lammpstrj
 
-# Analysis outputs
+# Large uploaded trajectories (kept on main / regenerated locally)
+data/
+
+# Legacy analysis outputs
 analysis/
 analysis_batch*/
+
+# Stray PNGs, but DO keep curated results/ figures (force-added below)
 *.png
+!results/**/*.png
