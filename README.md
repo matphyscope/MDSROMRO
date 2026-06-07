@@ -19,10 +19,12 @@ amorph/
   core/    io(리더) · frame · neighbors(cutoff행렬·이웃탐색) · cutoffs · average(시간평균)
   sro/     rdf · coordination(CN+ADF) · csro · voronoi · boo · hybridization · tetrahedra
   mro/     rings · bhatia_thornton · clusters · dihedral · tetra_connectivity
+  sweep    온도별 dump 자동 순회 → 물성 vs 온도 곡선 (T-scan 드라이버)
   presets  SiCN 전용 type_map / cutoff / ADF 삼중항
 notebooks/
-  SRO_analysis.ipynb    ← 단거리 규칙성
-  MRO_analysis.ipynb    ← 중거리 규칙성
+  SRO_analysis.ipynb    ← 단거리 규칙성 (한 구조/한 온도)
+  MRO_analysis.ipynb    ← 중거리 규칙성 (한 구조/한 온도)
+  Tsweep_analysis.ipynb ← 온도 의존성 (온도별 dump 자동 순회, 물성 vs T)
 ```
 
 ## 빠른 사용

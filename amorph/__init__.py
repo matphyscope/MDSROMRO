@@ -18,6 +18,8 @@ try:
     from . import mro
 except ImportError:
     mro = None
+from . import sweep
+from . import presets
 
 from .core import (Frame, load, read_dump, read_data, CutoffMatrix,
                    NeighborCache, select_frames, species_of, unique_pairs)
