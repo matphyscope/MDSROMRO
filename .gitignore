@@ -5,6 +5,8 @@ __pycache__/
 .ipynb_checkpoints/
 
 # Generated test fixtures (recreate with: python3 tests/make_test_data.py)
+tests/**/*.data
+tests/**/*.lammpstrj
 tests/*.data
 tests/*.lammpstrj
 

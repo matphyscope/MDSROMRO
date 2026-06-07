@@ -90,6 +90,33 @@ def write_dump_atom(path, frames):
                 f.write(f"{n} {tmap[e]} {s[0]:.6f} {s[1]:.6f} {s[2]:.6f}\n")
 
 
+def sicn_like(reps=4, species3=True, seed=1):
+    """Zincblende SiC with ~40% of C relabeled to N (N on C sublattice, bonds
+    only Si). Gives a 3-species structure with bonds for SRO/MRO smoke tests."""
+    c, e, box = diamond(a=4.36, reps=reps, species=("Si", "C"))
+    rng = np.random.default_rng(seed)
+    if species3:
+        cidx = np.where(e == "C")[0]
+        nsel = rng.choice(cidx, size=int(0.4 * len(cidx)), replace=False)
+        e = e.copy(); e[nsel] = "N"
+    return c, e, box, rng
+
+
+def make_tscan(out_dir, scheme, temps, rng, c, e, box, nframes=4):
+    """Write a synthetic temperature series (jitter grows with T) in one of the
+    two naming schemes: 'large2' (custom/element) or 'large1' (atom/scaled)."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    writer = write_dump_custom if scheme == "large2" else write_dump_atom
+    for T in temps:
+        amp = 0.02 + (T - temps[0]) / 300 * 0.05
+        fr = [(c + rng.normal(0, amp, c.shape), e, box) for _ in range(nframes)]
+        name = f"dump.{T}K.lammpstrj" if scheme == "large2" else f"dump_T{T:04d}.lammpstrj"
+        writer(out_dir / name, fr)
+    fr = [(c + rng.normal(0, 0.02, c.shape), e, box) for _ in range(nframes)]
+    cool = "dump.cool_300K.lammpstrj" if scheme == "large2" else "dump_cool_T0300.lammpstrj"
+    writer(out_dir / cool, fr)
+
+
 def main():
     # single-species diamond
     c, e, box = diamond(a=5.43, reps=3, species=("Si",))
@@ -105,9 +132,23 @@ def main():
     c2, e2, box2 = diamond(a=4.36, reps=3, species=("Si", "C"))
     write_data(HERE / "zincblende.data", c2, e2, box2)
 
+    # 3-species SiCN-like trajectory (SRO/MRO smoke tests)
+    cs, es, boxs, rngs = sicn_like(reps=4)
+    fr = [(cs + rngs.normal(0, 0.04, cs.shape), es, boxs) for _ in range(5)]
+    write_dump_custom(HERE / "sicn_synth.lammpstrj", fr)
+
+    # synthetic T-scans in BOTH naming schemes (sweep driver tests)
+    cs2, es2, boxs2, rng2 = sicn_like(reps=3, seed=7)
+    make_tscan(HERE / "tscan_large2", "large2", [300, 400, 500, 600], rng2,
+               cs2, es2, boxs2)
+    make_tscan(HERE / "tscan_large1", "large1", [300, 400, 500], rng2,
+               cs2, es2, boxs2)
+
     d_nn = 5.43 * np.sqrt(3) / 4
     print(f"diamond: {len(c)} atoms, nn distance = {d_nn:.4f} Å, expected CN=4")
     print(f"zincblende SiC: {len(c2)} atoms, nn = {4.36*np.sqrt(3)/4:.4f} Å (Si-C only)")
+    print(f"sicn_synth: {len(cs)} atoms, species {sorted(set(es))}")
+    print("synthetic T-scans: tests/tscan_large2 (custom), tests/tscan_large1 (atom)")
     print("wrote test files to", HERE)
 
 
