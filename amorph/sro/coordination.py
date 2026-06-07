@@ -13,11 +13,13 @@ pairs (cutoff 0) are simply never counted — matching the SiCN C–N/N–N
 convention when that matrix is used.
 """
 from __future__ import annotations
+from functools import partial
 import numpy as np
 
 from ..core.frame import species_of
 from ..core.neighbors import NeighborCache, CutoffMatrix
 from ..core.average import block_average
+from ..core.parallel import pmap
 
 
 def _directed_neighbors(frame, cutoffs: CutoffMatrix, cache=None):
@@ -45,7 +47,33 @@ def _directed_neighbors(frame, cutoffs: CutoffMatrix, cache=None):
 # ─────────────────────────────────────────────────────────────────────────────
 # Coordination numbers
 # ─────────────────────────────────────────────────────────────────────────────
-def coordination_numbers(traj, cutoffs: CutoffMatrix, n_blocks=5, max_cn=12):
+def _cn_frame(fr, cutoffs, sp, cn_bins, max_cn):
+    """Per-frame coordination kernel -> dict of picklable arrays/scalars."""
+    nbr = _directed_neighbors(fr, cutoffs)
+    elem = fr.elements
+    out_cn = {A: {B: np.nan for B in sp} for A in sp}
+    out_tot = {A: np.nan for A in sp}
+    out_dist = {A: np.full(len(cn_bins), np.nan) for A in sp}
+    for A in sp:
+        idxA = np.where(elem == A)[0]
+        if len(idxA) == 0:
+            continue
+        countsB = {B: 0 for B in sp}
+        tot_per_atom = np.zeros(len(idxA))
+        for n, k in enumerate(idxA):
+            for (b, _v) in nbr[k]:
+                countsB[elem[b]] += 1
+            tot_per_atom[n] = len(nbr[k])
+        for B in sp:
+            out_cn[A][B] = countsB[B] / len(idxA)
+        out_tot[A] = tot_per_atom.mean()
+        hist = np.bincount(np.clip(tot_per_atom.astype(int), 0, max_cn),
+                           minlength=len(cn_bins)).astype(float)
+        out_dist[A] = hist / hist.sum()
+    return out_cn, out_tot, out_dist
+
+
+def coordination_numbers(traj, cutoffs: CutoffMatrix, n_blocks=5, max_cn=12, jobs=1):
     """Time-averaged coordination numbers.
 
     Returns
@@ -64,30 +92,13 @@ def coordination_numbers(traj, cutoffs: CutoffMatrix, n_blocks=5, max_cn=12):
     pf_dist = {A: [] for A in sp}
     cn_bins = np.arange(0, max_cn + 1)
 
-    for fr in traj:
-        nbr = _directed_neighbors(fr, cutoffs)
-        elem = fr.elements
-        # per-atom counts per neighbour species
+    worker = partial(_cn_frame, cutoffs=cutoffs, sp=sp, cn_bins=cn_bins, max_cn=max_cn)
+    for out_cn, out_tot, out_dist in pmap(worker, traj, jobs=jobs):
         for A in sp:
-            idxA = np.where(elem == A)[0]
-            if len(idxA) == 0:
-                for B in sp:
-                    pf_cn[A][B].append(np.nan)
-                pf_tot[A].append(np.nan)
-                pf_dist[A].append(np.full(len(cn_bins), np.nan))
-                continue
-            countsB = {B: 0 for B in sp}
-            tot_per_atom = np.zeros(len(idxA))
-            for n, k in enumerate(idxA):
-                for (b, _v) in nbr[k]:
-                    countsB[elem[b]] += 1
-                tot_per_atom[n] = len(nbr[k])
             for B in sp:
-                pf_cn[A][B].append(countsB[B] / len(idxA))
-            pf_tot[A].append(tot_per_atom.mean())
-            hist = np.bincount(np.clip(tot_per_atom.astype(int), 0, max_cn),
-                               minlength=len(cn_bins)).astype(float)
-            pf_dist[A].append(hist / hist.sum())
+                pf_cn[A][B].append(out_cn[A][B])
+            pf_tot[A].append(out_tot[A])
+            pf_dist[A].append(out_dist[A])
 
     cn = {A: {B: block_average(pf_cn[A][B], n_blocks) for B in sp} for A in sp}
     cn_total = {A: block_average(pf_tot[A], n_blocks) for A in sp}
@@ -99,7 +110,36 @@ def coordination_numbers(traj, cutoffs: CutoffMatrix, n_blocks=5, max_cn=12):
 # ─────────────────────────────────────────────────────────────────────────────
 # Angular distribution function
 # ─────────────────────────────────────────────────────────────────────────────
-def adf(traj, triplets, cutoffs: CutoffMatrix, nbins=180, n_blocks=5):
+def _adf_frame(fr, cutoffs, triplets, edges, dtheta, nbins):
+    """Per-frame ADF kernel -> {triplet: density array or nan array}."""
+    nbr = _directed_neighbors(fr, cutoffs)
+    elem = fr.elements
+    out = {}
+    for (B, A, C) in triplets:
+        angles = []
+        idxA = np.where(elem == A)[0]
+        for k in idxA:
+            bs = [v for (b, v) in nbr[k] if elem[b] == B]
+            cs = [v for (c, v) in nbr[k] if elem[c] == C]
+            if B == C:
+                vs = bs
+                for x in range(len(vs)):
+                    for y in range(x + 1, len(vs)):
+                        angles.append(_angle(vs[x], vs[y]))
+            else:
+                for vb in bs:
+                    for vc in cs:
+                        angles.append(_angle(vb, vc))
+        if angles:
+            h, _ = np.histogram(angles, bins=edges)
+            area = h.sum() * dtheta
+            out[(B, A, C)] = h / area if area > 0 else np.zeros(nbins)
+        else:
+            out[(B, A, C)] = np.full(nbins, np.nan)
+    return out
+
+
+def adf(traj, triplets, cutoffs: CutoffMatrix, nbins=180, n_blocks=5, jobs=1):
     """Bond-angle distribution for B–A–C triplets (centre = A).
 
     Parameters
@@ -121,31 +161,11 @@ def adf(traj, triplets, cutoffs: CutoffMatrix, nbins=180, n_blocks=5):
     dtheta = edges[1] - edges[0]
 
     pf = {t: [] for t in triplets}
-    for fr in traj:
-        nbr = _directed_neighbors(fr, cutoffs)
-        elem = fr.elements
-        for (B, A, C) in triplets:
-            angles = []
-            idxA = np.where(elem == A)[0]
-            for k in idxA:
-                bs = [v for (b, v) in nbr[k] if elem[b] == B]
-                cs = [v for (c, v) in nbr[k] if elem[c] == C]
-                if B == C:
-                    vs = bs
-                    for x in range(len(vs)):
-                        for y in range(x + 1, len(vs)):
-                            angles.append(_angle(vs[x], vs[y]))
-                else:
-                    # need distinct neighbour atoms; bs and cs are disjoint sets
-                    for vb in bs:
-                        for vc in cs:
-                            angles.append(_angle(vb, vc))
-            if angles:
-                h, _ = np.histogram(angles, bins=edges)
-                area = h.sum() * dtheta
-                pf[(B, A, C)].append(h / area if area > 0 else np.zeros(nbins))
-            else:
-                pf[(B, A, C)].append(np.full(nbins, np.nan))
+    worker = partial(_adf_frame, cutoffs=cutoffs, triplets=triplets,
+                     edges=edges, dtheta=dtheta, nbins=nbins)
+    for out in pmap(worker, traj, jobs=jobs):
+        for t in triplets:
+            pf[t].append(out[t])
 
     result = {"theta": theta}
     for t in triplets:

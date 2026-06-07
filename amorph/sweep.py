@@ -21,6 +21,7 @@ from .core.io import load
 from .core.average import select_frames, block_average
 from .core.neighbors import CutoffMatrix
 from .core.frame import species_of
+from .core.parallel import pmap
 from .sro import coordination, tetrahedra
 from .mro import rings as mro_rings, clusters as mro_clusters, bhatia_thornton
 
@@ -127,9 +128,18 @@ def trajectory_scalars(traj, cutoffs: CutoffMatrix, *, masses=None,
 # ─────────────────────────────────────────────────────────────────────────────
 # Full temperature series
 # ─────────────────────────────────────────────────────────────────────────────
+def _series_task(task):
+    """Top-level worker (picklable): load one dump and compute its scalars."""
+    d, path, type_map, prod_range, stride, cutoffs, scalar_kwargs = task
+    traj = load(path, type_map=type_map, frames="all")
+    traj = select_frames(traj, frame_range=prod_range, stride=stride)
+    scalars = trajectory_scalars(traj, cutoffs, **scalar_kwargs)
+    return d, scalars
+
+
 def temperature_series(dumps, cutoffs: CutoffMatrix, *, type_map=None,
                        prod_range=None, stride=1, include_cool=True,
-                       verbose=True, **scalar_kwargs):
+                       verbose=True, jobs=1, **scalar_kwargs):
     """Run :func:`trajectory_scalars` across a list of temperature dumps.
 
     Parameters
@@ -140,6 +150,8 @@ def temperature_series(dumps, cutoffs: CutoffMatrix, *, type_map=None,
     type_map : dict | None    for atom-style dumps without an element column.
     prod_range, stride : production window for every dump.
     include_cool : also process the post-cooling 300 K points.
+    jobs : int   temperatures processed in parallel (<=0 = all CPUs). Each worker
+        loads its own dump, so this is the most efficient axis to parallelise.
     scalar_kwargs : forwarded to :func:`trajectory_scalars`.
 
     Returns
@@ -155,16 +167,11 @@ def temperature_series(dumps, cutoffs: CutoffMatrix, *, type_map=None,
     col_mean, col_err = {}, {}
 
     n_tot = len(entries)
-    for i, d in enumerate(entries, 1):
-        if verbose:
-            print(f"  [{i}/{n_tot}] {d['label']:<12} loading {Path(d['path']).name} ...",
-                  flush=True)
-        traj = load(d["path"], type_map=type_map, frames="all")
-        traj = select_frames(traj, frame_range=prod_range, stride=stride)
-        if verbose:
-            print(f"  [{i}/{n_tot}] {d['label']:<12} {len(traj)} frames → computing "
-                  f"observables ...", flush=True)
-        scalars = trajectory_scalars(traj, cutoffs, **scalar_kwargs)
+    tasks = [(d, d["path"], type_map, prod_range, stride, cutoffs, scalar_kwargs)
+             for d in entries]
+    cb = (lambda k: print(f"  [{k}/{n_tot}] temperatures done", flush=True)) \
+        if verbose else None
+    for d, scalars in pmap(_series_task, tasks, jobs=jobs, on_done=cb):
         T.append(d["T"]); labels.append(d["label"]); cool.append(d["cool"])
         for name, (m, e) in scalars.items():
             col_mean.setdefault(name, []).append(m)

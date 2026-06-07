@@ -13,10 +13,12 @@ frames (``max_frames``) — the ring distribution is well-converged with a few
 decorrelated snapshots.
 """
 from __future__ import annotations
+from functools import partial
 import numpy as np
 from collections import Counter
 
 from ..core.average import block_average
+from ..core.parallel import pmap
 from ._common import build_graph, require_networkx
 
 
@@ -45,8 +47,13 @@ def _classify(ring_atoms, elements):
     return f"pure-{els[0]}" if len(uniq) == 1 else "mixed"
 
 
+def _rings_for_frame(fr, cutoffs, max_size):
+    """Pickle-friendly wrapper: (ring atom-tuples, elements) for one frame."""
+    return _frame_rings(fr, cutoffs, max_size), fr.elements
+
+
 def ring_statistics(traj, cutoffs, max_size=12, max_frames=None, n_blocks=3,
-                    verbose=False):
+                    verbose=False, jobs=1):
     """Time-averaged ring-size distribution.
 
     Parameters
@@ -75,16 +82,18 @@ def ring_statistics(traj, cutoffs, max_size=12, max_frames=None, n_blocks=3,
     pf_count = []
     pf_peratom = []
     comp_acc = {s: Counter() for s in sizes}
-    for n, fr in enumerate(frames):
-        rings = _frame_rings(fr, cutoffs, max_size)
+    worker = partial(_rings_for_frame, cutoffs=cutoffs, max_size=max_size)
+    n_atoms = [fr.n_atoms for fr in frames]
+    cb = (lambda d: print(f"  [rings] {d}/{len(frames)} frames done", flush=True)) \
+        if verbose else None
+    for n, (rings, elements) in enumerate(pmap(worker, frames, jobs=jobs, on_done=cb)):
         by_size = Counter(len(r) for r in rings)
         cvec = np.array([by_size.get(s, 0) for s in sizes], dtype=float)
         pf_count.append(cvec)
-        pf_peratom.append(cvec / fr.n_atoms)
+        pf_peratom.append(cvec / n_atoms[n])
         for r in rings:
-            comp_acc[len(r)][_classify(r, fr.elements)] += 1
-        if verbose:
-            print(f"  [rings] frame {n+1}/{len(frames)}: {len(rings)} rings")
+            els = [elements[a] for a in r]
+            comp_acc[len(r)]["pure-" + els[0] if len(set(els)) == 1 else "mixed"] += 1
 
     cM, cE = block_average(pf_count, n_blocks)
     pM, pE = block_average(pf_peratom, n_blocks)

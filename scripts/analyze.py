@@ -10,6 +10,9 @@ The mode is auto-detected from the path: a FILE -> single-structure analysis,
 a DIRECTORY -> temperature sweep over the dumps it contains. (--single/--sweep
 force a mode.)
 
+Multi-core by default (--jobs 0 = all cores): a sweep runs temperatures in
+parallel; a single file runs frames in parallel. Use --jobs 1 for serial.
+
 SINGLE structure (full SRO+MRO figure set):
   python3 scripts/analyze.py data/dump_T0300.lammpstrj --type-map 1:Si,2:C,3:N
 
@@ -68,9 +71,9 @@ def analyze_single(path, CM, rep, *, type_map, prod, stride, args):
     rep.print(f"  mass density: {rho:.4f} g/cc")
 
     # 1) partial g(r) — ALL pairs, including non-bonded (C-N, N-N show avoidance)
-    rep.print("\n→ [1/6] partial g(r) ...")
+    rep.print(f"\n→ [1/6] partial g(r) ... (jobs={args.jobs})")
     R = rdf.partial_rdf(traj, pairs=all_pairs, r_max=args.rmax, nbins=args.nbins,
-                        n_blocks=args.nblocks)
+                        n_blocks=args.nblocks, jobs=args.jobs)
     fig, ax = plt.subplots(figsize=(7.5, 4.5))
     data = {"r": R["r"]}
     rep.print("\n[g(r)] first-peak (r, height, FWHM)   [* = non-bonded by potential]:")
@@ -90,7 +93,7 @@ def analyze_single(path, CM, rep, *, type_map, prod, stride, args):
 
     # 2) coordination numbers (stacked bar) ---------------------------------
     rep.print("→ [2/6] coordination numbers ...")
-    CN = coordination.coordination_numbers(traj, CM, n_blocks=args.nblocks)
+    CN = coordination.coordination_numbers(traj, CM, n_blocks=args.nblocks, jobs=args.jobs)
     fig, ax = plt.subplots(figsize=(6, 4.2))
     rep.print("\n[CN] coordination numbers:")
     cn_rows = [["center", *sp, "total"]]
@@ -120,7 +123,7 @@ def analyze_single(path, CM, rep, *, type_map, prod, stride, args):
                 triplets.append((B, A, C))
     if triplets:
         rep.print("→ [3/6] bond-angle distributions (ADF) ...")
-        ADF = coordination.adf(traj, triplets, CM, nbins=180, n_blocks=args.nblocks)
+        ADF = coordination.adf(traj, triplets, CM, nbins=180, n_blocks=args.nblocks, jobs=args.jobs)
         fig, ax = plt.subplots(figsize=(7, 4.5))
         data = {"theta": ADF["theta"]}
         rep.print("\n[ADF] bond-angle peaks:")
@@ -139,7 +142,8 @@ def analyze_single(path, CM, rep, *, type_map, prod, stride, args):
     rep.print(f"→ [4/6] ring statistics (slowest; {args.ring_frames} frames) ...")
     RG = mro_rings.ring_statistics(traj, CM, max_size=args.max_ring,
                                    max_frames=args.ring_frames,
-                                   n_blocks=min(args.nblocks, args.ring_frames))
+                                   n_blocks=min(args.nblocks, args.ring_frames),
+                                   jobs=args.jobs)
     fig, ax = plt.subplots(figsize=(6, 4.2))
     ax.bar(RG["sizes"], RG["count"]["mean"], yerr=RG["count"]["err"],
            color="#6a8caf", capsize=3)
@@ -196,13 +200,14 @@ def analyze_sweep(directory, CM, rep, *, type_map, prod, stride, args):
         rep.print("no dumps found"); return
 
     rep.print(f"\n[1/2] computing observables for {len(dumps)} temperatures "
-              f"(rings={'on' if args.include_rings else 'off'}) ...")
+              f"(rings={'on' if args.include_rings else 'off'}, jobs={args.jobs}) ...")
     S = sweep.temperature_series(
         dumps, CM, type_map=type_map, prod_range=prod, stride=stride,
         tetra_center=args.tetra_center, free_element=args.free_element,
         network_group=["Si", "N"], bt_groups=(["Si", "N"], ["C"]),
         include_rings=args.include_rings, max_ring_size=args.max_ring,
-        max_frames_rings=args.ring_frames, n_blocks=args.nblocks, verbose=True)
+        max_frames_rings=args.ring_frames, n_blocks=args.nblocks,
+        verbose=True, jobs=args.jobs)
 
     rep.print("\n" + sweep.to_table(S))
     rep.save_table("sweep_table", sweep.to_table(S))
@@ -237,7 +242,8 @@ def analyze_sweep(directory, CM, rep, *, type_map, prod, stride, args):
                                   frame_range=prod, stride=stride * 4)
         sp0 = sp0 or core.species_of(traj)
         all_pairs = core.unique_pairs(sp0)
-        R = rdf.partial_rdf(traj, pairs=all_pairs, r_max=args.rmax, nbins=args.nbins, n_blocks=1)
+        R = rdf.partial_rdf(traj, pairs=all_pairs, r_max=args.rmax, nbins=args.nbins,
+                            n_blocks=1, jobs=args.jobs)
         grT[d["label"]] = R
     for (A, B) in all_pairs:
         fig, ax = plt.subplots(figsize=(7, 4.2))
@@ -265,6 +271,9 @@ def main():
     ap.add_argument("--type-map", default="1:Si,2:C,3:N")
     ap.add_argument("--cutoffs", default=None)
     ap.add_argument("--prod", default=None)
+    ap.add_argument("--jobs", "-j", type=int, default=0,
+                    help="parallel workers: 0 = all CPU cores (default), 1 = serial. "
+                         "Sweep parallelises across temperatures; single file across frames.")
     ap.add_argument("--stride", type=int, default=4)
     ap.add_argument("--rmax", type=float, default=8.0)
     ap.add_argument("--nbins", type=int, default=400)

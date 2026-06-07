@@ -19,9 +19,12 @@ Normalisation (validated against the diamond/zincblende test crystals):
 from __future__ import annotations
 import numpy as np
 
+from functools import partial
+
 from ..core.frame import species_of, unique_pairs
 from ..core.neighbors import NeighborCache
 from ..core.average import block_average
+from ..core.parallel import pmap
 from ..core._compat import trapezoid
 
 
@@ -63,7 +66,7 @@ def _frame_partials(frame, pairs, edges, shell, r_max):
     return out
 
 
-def partial_rdf(traj, pairs=None, r_max=10.0, nbins=500, n_blocks=5):
+def partial_rdf(traj, pairs=None, r_max=10.0, nbins=500, n_blocks=5, jobs=1):
     """Time-averaged partial and total g(r) with block error bands.
 
     Parameters
@@ -89,8 +92,8 @@ def partial_rdf(traj, pairs=None, r_max=10.0, nbins=500, n_blocks=5):
 
     per_frame = {p: [] for p in pairs}
     per_frame["total"] = []
-    for fr in traj:
-        g = _frame_partials(fr, pairs, edges, shell, r_max)
+    worker = partial(_frame_partials, pairs=pairs, edges=edges, shell=shell, r_max=r_max)
+    for g in pmap(worker, traj, jobs=jobs):
         for k in per_frame:
             per_frame[k].append(g[k])
 
