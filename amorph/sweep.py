@@ -96,9 +96,10 @@ def trajectory_scalars(traj, cutoffs: CutoffMatrix, *, masses=None,
     if free_element is not None and free_element in sp:
         FC = mro_clusters.free_clusters(traj, cutoffs, element=free_element,
                                         n_blocks=n_blocks)
-        cols[f"free{free_element}_mean_La"] = FC["mean_La"]
-        cols[f"free{free_element}_max_size"] = FC["max_size"]
+        cols[f"free{free_element}_mean_La"] = FC["mean_La"]      # finite clusters only
+        cols[f"free{free_element}_max_finite"] = FC["max_finite_size"]
         cols[f"free{free_element}_n_graphenic"] = FC["n_graphenic"]
+        cols[f"free{free_element}_n_percolating"] = FC["n_percolating"]
 
     # network percolation
     if network_group is not None:
@@ -112,7 +113,9 @@ def trajectory_scalars(traj, cutoffs: CutoffMatrix, *, masses=None,
         gA, gB = bt_groups
         try:
             BT = bhatia_thornton.bhatia_thornton(traj, gA, gB, n_blocks=n_blocks)
-            ilow = int(np.argmin(np.abs(BT["q"] - 0.5)))
+            # smallest physically accessible Q is 2π/L; don't claim below it
+            qmin = 2.0 * np.pi / float(np.mean([fr.L.max() for fr in traj]))
+            ilow = int(np.argmin(np.abs(BT["q"] - max(0.5, qmin))))
             cols["SCC_lowQ"] = (float(BT["S_CC"][ilow]), 0.0)
             cols["SCC_ideal"] = (float(BT["S_CC_ideal"]), 0.0)
         except ValueError:

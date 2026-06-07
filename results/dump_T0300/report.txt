@@ -1,6 +1,6 @@
 ========================================================================
 amorph 0.1.0 analyze: data/dump_T0300.lammpstrj
-generated 2026-06-07 13:16:07   ->  results/dump_T0300
+generated 2026-06-07 13:24:49   ->  results/dump_T0300
 ========================================================================
 
 [dump_T0300.lammpstrj] frames=101 atoms=997 species=['C', 'N', 'Si']
@@ -45,4 +45,5 @@ generated 2026-06-07 13:16:07   ->  results/dump_T0300
 [saved] results/dump_T0300/tetra_connectivity.png
 [saved] results/dump_T0300/tetra_connectivity.txt
 [tetra] Si: corner 96.9%, edge 3.1%, face 0.0%
-[clusters] free-C: n=70, isolated=33, graphenic=17, mean L_a=4.11 Å, max size=105
+[clusters] free-C: n=70, isolated=33, graphenic=17, mean L_a=3.59 Å (finite clusters only), max finite size=30, raw max size=105
+  ⚠ 1.0 free-C cluster(s) PERCOLATE the box → their L_a/R_g excluded (PBC artifact; box too small to bound this phase). Free-C forms a connected, box-spanning phase.

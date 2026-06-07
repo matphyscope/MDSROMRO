@@ -164,7 +164,14 @@ def analyze_single(path, CM, rep, *, type_map, prod, stride, args):
                                         n_blocks=args.nblocks)
         rep.print(f"[clusters] free-{args.free_element}: n={FC['n_clusters'][0]:.0f}, "
                   f"isolated={FC['n_isolated'][0]:.0f}, graphenic={FC['n_graphenic'][0]:.0f}, "
-                  f"mean L_a={FC['mean_La'][0]:.2f} Å, max size={FC['max_size'][0]:.0f}")
+                  f"mean L_a={FC['mean_La'][0]:.2f} Å (finite clusters only), "
+                  f"max finite size={FC['max_finite_size'][0]:.0f}, "
+                  f"raw max size={FC['max_size'][0]:.0f}")
+        if FC["n_percolating"][0] > 0:
+            rep.print(f"  ⚠ {FC['n_percolating'][0]:.1f} free-{args.free_element} cluster(s) "
+                      f"PERCOLATE the box → their L_a/R_g excluded (PBC artifact; "
+                      f"box too small to bound this phase). Free-{args.free_element} "
+                      f"forms a connected, box-spanning phase.")
     return R  # return g(r) for optional reuse
 
 

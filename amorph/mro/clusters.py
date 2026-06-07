@@ -25,15 +25,30 @@ def _components(G):
     return [c for c in nx.connected_components(G)]
 
 
-def _cluster_records(frame, G):
-    """Per-component geometry records for graph G on this frame."""
+def _cluster_records(frame, G, perc_thresh=0.85):
+    """Per-component geometry records for graph G on this frame.
+
+    A component whose unwrapped extent spans the box (>= ``perc_thresh`` of L on
+    any axis) PERCOLATES: under PBC it connects to its own periodic image, so its
+    R_g / L_a are ill-defined. Such records are flagged ``percolates=True`` and
+    their geometry set to NaN so callers can exclude them from size statistics.
+    """
     recs = []
     for comp in _components(G):
         atoms = list(comp)
+        if len(atoms) < 2:
+            recs.append({"size": len(atoms), "R_g": 0.0, "L_a": 0.0,
+                         "aspect": 1.0, "atoms": atoms, "percolates": False})
+            continue
         coords = unwrap_component(atoms, G, frame)
-        Rg, L_a, aspect, _ = gyration(coords) if len(atoms) > 1 else (0.0, 0.0, 1.0, None)
+        extent = coords.max(axis=0) - coords.min(axis=0)
+        perc = bool(np.max(extent / frame.L) >= perc_thresh)
+        if perc:
+            Rg = L_a = aspect = np.nan
+        else:
+            Rg, L_a, aspect, _ = gyration(coords)
         recs.append({"size": len(atoms), "R_g": Rg, "L_a": L_a,
-                     "aspect": aspect, "atoms": atoms})
+                     "aspect": aspect, "atoms": atoms, "percolates": perc})
     return recs
 
 
@@ -53,6 +68,7 @@ def free_clusters(traj, cutoffs, element, n_blocks=5, min_graphenic=4):
     Returns time-averaged scalars + last-frame per-cluster records.
     """
     pf_nclus, pf_iso, pf_large, pf_meanLa, pf_maxsize = [], [], [], [], []
+    pf_perc, pf_maxfinite = [], []
     last = None
     for fr in traj:
         G = build_graph(fr, cutoffs, nodes=np.where(fr.mask(element))[0],
@@ -60,17 +76,23 @@ def free_clusters(traj, cutoffs, element, n_blocks=5, min_graphenic=4):
         recs = _cluster_records(fr, G)
         sizes = [r["size"] for r in recs]
         large = [r for r in recs if r["size"] >= min_graphenic]
+        # L_a only meaningful for finite (non-percolating) clusters
+        finite_La = [r["L_a"] for r in large if not r["percolates"]]
+        finite_sizes = [r["size"] for r in recs if not r["percolates"]]
         pf_nclus.append(len(recs))
         pf_iso.append(sum(1 for s in sizes if s == 1))
         pf_large.append(len(large))
-        pf_meanLa.append(np.mean([r["L_a"] for r in large]) if large else np.nan)
+        pf_meanLa.append(np.mean(finite_La) if finite_La else np.nan)
         pf_maxsize.append(max(sizes) if sizes else 0)
+        pf_maxfinite.append(max(finite_sizes) if finite_sizes else 0)
+        pf_perc.append(sum(1 for r in recs if r["percolates"]))
         last = recs
     def ba(x): return block_average(x, n_blocks)
     return dict(element=element,
                 n_clusters=ba(pf_nclus), n_isolated=ba(pf_iso),
                 n_graphenic=ba(pf_large), mean_La=ba(pf_meanLa),
-                max_size=ba(pf_maxsize), last_frame=last,
+                max_size=ba(pf_maxsize), max_finite_size=ba(pf_maxfinite),
+                n_percolating=ba(pf_perc), last_frame=last,
                 min_graphenic=min_graphenic)
 
 
