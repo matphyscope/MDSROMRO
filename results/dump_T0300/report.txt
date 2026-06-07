@@ -1,49 +1,57 @@
 ========================================================================
 amorph 0.1.0 analyze: data/dump_T0300.lammpstrj [SINGLE]
-generated 2026-06-07 13:31:13   ->  results/dump_T0300
+generated 2026-06-07 14:38:19   ->  results/dump_T0300
 ========================================================================
+loading dump_T0300.lammpstrj ...
 
-[dump_T0300.lammpstrj] frames=101 atoms=997 species=['C', 'N', 'Si']
+[dump_T0300.lammpstrj] frames=51 atoms=997 species=['C', 'N', 'Si']
   composition mol%: C 34.00, N 20.86, Si 45.14
-  mass density: 2.7251 g/cc
+  mass density: 2.7253 g/cc
+
+→ [1/6] partial g(r) ...
 
 [g(r)] first-peak (r, height, FWHM)   [* = non-bonded by potential]:
-  C-C : r=1.470 Å  h=19.51  FWHM=0.100
-  C-N*: r=2.830 Å  h=1.34  FWHM=0.942
-  C-Si : r=1.830 Å  h=5.51  FWHM=0.150
-  N-N*: r=2.850 Å  h=2.50  FWHM=0.737
-  N-Si : r=1.750 Å  h=20.91  FWHM=0.089
-  Si-Si : r=2.990 Å  h=6.56  FWHM=0.114
+  C-C : r=1.450 Å  h=19.76  FWHM=0.099
+  C-N*: r=2.830 Å  h=1.35  FWHM=0.943
+  C-Si : r=1.830 Å  h=5.46  FWHM=0.152
+  N-N*: r=2.870 Å  h=2.48  FWHM=0.743
+  N-Si : r=1.750 Å  h=21.02  FWHM=0.088
+  Si-Si : r=2.990 Å  h=6.59  FWHM=0.113
 [saved] results/dump_T0300/gr_partials.png
 [saved] results/dump_T0300/gr_partials.txt
+→ [2/6] coordination numbers ...
 
 [CN] coordination numbers:
   C: total 3.133±0.000
   N: total 2.990±0.000
-  Si: total 4.204±0.003
+  Si: total 4.205±0.005
 [saved] results/dump_T0300/coordination.png
 [saved] results/dump_T0300/coordination.txt
 [saved] results/dump_T0300/coordination_table.txt
+→ [3/6] bond-angle distributions (ADF) ...
 
 [ADF] bond-angle peaks:
-  C-C-C: 120.5°
+  C-C-C: 119.5°
   C-C-Si: 119.5°
   Si-C-Si: 119.5°
   Si-N-Si: 119.5°
   C-Si-C: 111.5°
-  C-Si-N: 110.5°
+  C-Si-N: 109.5°
   C-Si-Si: 105.5°
   N-Si-N: 103.5°
-  N-Si-Si: 96.5°
+  N-Si-Si: 95.5°
   Si-Si-Si: 112.5°
 [saved] results/dump_T0300/adf.png
 [saved] results/dump_T0300/adf.txt
+→ [4/6] ring statistics (slowest; 3 frames) ...
 [saved] results/dump_T0300/rings.png
 [saved] results/dump_T0300/rings.txt
 
 [rings] 3:7, 4:33, 5:197, 6:284, 7:122, 8:16, 9:1
+→ [5/6] tetrahedral connectivity ...
 [saved] results/dump_T0300/tetra_connectivity.png
 [saved] results/dump_T0300/tetra_connectivity.txt
-[tetra] Si: corner 96.9%, edge 3.1%, face 0.0%
+[tetra] Si: corner 96.8%, edge 3.2%, face 0.0%
+→ [6/6] free-element clusters ...
 [clusters] free-C: n=70, isolated=33, graphenic=17, mean L_a=3.59 Å (finite clusters only), max finite size=30, raw max size=105
   ⚠ 1.0 free-C cluster(s) PERCOLATE the box → their L_a/R_g excluded (PBC artifact; box too small to bound this phase). Free-C forms a connected, box-spanning phase.
