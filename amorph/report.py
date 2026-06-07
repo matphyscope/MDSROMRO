@@ -34,7 +34,7 @@ class Reporter:
         s = " ".join(str(a) for a in args)
         self._log.append(s)
         if self.echo:
-            print(s)
+            print(s, flush=True)   # flush so progress shows in real time
 
     def flush(self, name="report.txt"):
         path = self.dir / name

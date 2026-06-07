@@ -154,11 +154,16 @@ def temperature_series(dumps, cutoffs: CutoffMatrix, *, type_map=None,
     T, labels, cool = [], [], []
     col_mean, col_err = {}, {}
 
-    for d in entries:
+    n_tot = len(entries)
+    for i, d in enumerate(entries, 1):
         if verbose:
-            print(f"[sweep] {d['label']}  ({Path(d['path']).name}) ...")
+            print(f"  [{i}/{n_tot}] {d['label']:<12} loading {Path(d['path']).name} ...",
+                  flush=True)
         traj = load(d["path"], type_map=type_map, frames="all")
         traj = select_frames(traj, frame_range=prod_range, stride=stride)
+        if verbose:
+            print(f"  [{i}/{n_tot}] {d['label']:<12} {len(traj)} frames → computing "
+                  f"observables ...", flush=True)
         scalars = trajectory_scalars(traj, cutoffs, **scalar_kwargs)
         T.append(d["T"]); labels.append(d["label"]); cool.append(d["cool"])
         for name, (m, e) in scalars.items():

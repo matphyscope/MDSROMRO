@@ -53,6 +53,7 @@ def parse_prod(s):
 
 # ─────────────────────────────────────────────────────────────────────────────
 def analyze_single(path, CM, rep, *, type_map, prod, stride, args):
+    rep.print(f"loading {Path(path).name} ...")
     traj = core.select_frames(core.load(path, type_map=type_map, frames="all"),
                               frame_range=prod, stride=stride)
     sp = core.species_of(traj)
@@ -67,6 +68,7 @@ def analyze_single(path, CM, rep, *, type_map, prod, stride, args):
     rep.print(f"  mass density: {rho:.4f} g/cc")
 
     # 1) partial g(r) — ALL pairs, including non-bonded (C-N, N-N show avoidance)
+    rep.print("\n→ [1/6] partial g(r) ...")
     R = rdf.partial_rdf(traj, pairs=all_pairs, r_max=args.rmax, nbins=args.nbins,
                         n_blocks=args.nblocks)
     fig, ax = plt.subplots(figsize=(7.5, 4.5))
@@ -87,6 +89,7 @@ def analyze_single(path, CM, rep, *, type_map, prod, stride, args):
     rep.save_fig(fig, "gr_partials", data=data); plt.close(fig)
 
     # 2) coordination numbers (stacked bar) ---------------------------------
+    rep.print("→ [2/6] coordination numbers ...")
     CN = coordination.coordination_numbers(traj, CM, n_blocks=args.nblocks)
     fig, ax = plt.subplots(figsize=(6, 4.2))
     rep.print("\n[CN] coordination numbers:")
@@ -116,6 +119,7 @@ def analyze_single(path, CM, rep, *, type_map, prod, stride, args):
             for C in bonded[i:]:
                 triplets.append((B, A, C))
     if triplets:
+        rep.print("→ [3/6] bond-angle distributions (ADF) ...")
         ADF = coordination.adf(traj, triplets, CM, nbins=180, n_blocks=args.nblocks)
         fig, ax = plt.subplots(figsize=(7, 4.5))
         data = {"theta": ADF["theta"]}
@@ -132,6 +136,7 @@ def analyze_single(path, CM, rep, *, type_map, prod, stride, args):
         rep.save_fig(fig, "adf", data=data); plt.close(fig)
 
     # 4) rings --------------------------------------------------------------
+    rep.print(f"→ [4/6] ring statistics (slowest; {args.ring_frames} frames) ...")
     RG = mro_rings.ring_statistics(traj, CM, max_size=args.max_ring,
                                    max_frames=args.ring_frames,
                                    n_blocks=min(args.nblocks, args.ring_frames))
@@ -148,6 +153,7 @@ def analyze_single(path, CM, rep, *, type_map, prod, stride, args):
 
     # 5) tetra connectivity -------------------------------------------------
     if args.tetra_center in sp:
+        rep.print("→ [5/6] tetrahedral connectivity ...")
         TC = tetra_connectivity.tetra_connectivity(traj, CM, center=args.tetra_center,
                                                    d_max=4.0, n_blocks=args.nblocks)
         fr = TC["fractions"]
@@ -164,6 +170,7 @@ def analyze_single(path, CM, rep, *, type_map, prod, stride, args):
 
     # 6) free-element clusters ---------------------------------------------
     if args.free_element in sp:
+        rep.print("→ [6/6] free-element clusters ...")
         FC = mro_clusters.free_clusters(traj, CM, element=args.free_element,
                                         n_blocks=args.nblocks)
         rep.print(f"[clusters] free-{args.free_element}: n={FC['n_clusters'][0]:.0f}, "
@@ -188,12 +195,14 @@ def analyze_sweep(directory, CM, rep, *, type_map, prod, stride, args):
     if not dumps:
         rep.print("no dumps found"); return
 
+    rep.print(f"\n[1/2] computing observables for {len(dumps)} temperatures "
+              f"(rings={'on' if args.include_rings else 'off'}) ...")
     S = sweep.temperature_series(
         dumps, CM, type_map=type_map, prod_range=prod, stride=stride,
         tetra_center=args.tetra_center, free_element=args.free_element,
         network_group=["Si", "N"], bt_groups=(["Si", "N"], ["C"]),
         include_rings=args.include_rings, max_ring_size=args.max_ring,
-        max_frames_rings=args.ring_frames, n_blocks=args.nblocks, verbose=False)
+        max_frames_rings=args.ring_frames, n_blocks=args.nblocks, verbose=True)
 
     rep.print("\n" + sweep.to_table(S))
     rep.save_table("sweep_table", sweep.to_table(S))
@@ -219,9 +228,11 @@ def analyze_sweep(directory, CM, rep, *, type_map, prod, stride, args):
     rep.save_fig(fig, "sweep_vs_T", data=sweep_data); plt.close(fig)
 
     # g(r) overlay across temperature, one figure per pair (ALL pairs)
+    rep.print(f"\n[2/2] g(r) overlays across temperature ...")
     sp0 = None
     grT = {}
-    for d in dumps:
+    for i, d in enumerate(dumps, 1):
+        rep.print(f"  [{i}/{len(dumps)}] g(r) for {d['label']} ...")
         traj = core.select_frames(core.load(d["path"], type_map=type_map, frames="all"),
                                   frame_range=prod, stride=stride * 4)
         sp0 = sp0 or core.species_of(traj)
