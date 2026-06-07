@@ -1,0 +1,4 @@
+# T  rmin_CC_mean  rmin_CC_err  rmin_CSi_mean  rmin_CSi_err  rmin_NSi_mean  rmin_NSi_err  rmin_SiSi_mean  rmin_SiSi_err
+300 1.75 0 2.29 0 2.11 0 2.83 0
+600 1.77 0 2.31 0 2.15 0 2.83 0
+900 1.83 0 2.33 0 2.23 0 2.83 0

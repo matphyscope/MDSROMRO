@@ -1,0 +1,4 @@
+# T  gr_CC_r_mean  gr_CC_r_err  gr_CN_r_mean  gr_CN_r_err  gr_CSi_r_mean  gr_CSi_r_err  gr_NN_r_mean  gr_NN_r_err  gr_NSi_r_mean  gr_NSi_r_err  gr_SiSi_r_mean  gr_SiSi_r_err  gr_total_r_mean  gr_total_r_err
+300 1.458 0.00979796 2.878 0.0411825 1.826 0.0149666 2.83 0.0357771 1.75 0 2.99 0 1.75 0
+600 1.466 0.008 2.914 0.0149666 1.842 0.00979796 2.722 0.0430813 1.75 0 3.006 0.008 1.77 0
+900 1.466 0.008 2.886 0.0685857 1.834 0.0149666 2.814 0.09992 1.754 0.008 3.006 0.008 1.778 0.00979796

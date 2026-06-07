@@ -1,0 +1,4 @@
+# T  alpha_CN_mean  alpha_CN_err  alpha_CSi_mean  alpha_CSi_err  alpha_NC_mean  alpha_NC_err  alpha_NSi_mean  alpha_NSi_err  alpha_SiC_mean  alpha_SiC_err  alpha_SiN_mean  alpha_SiN_err  alpha_SiSi_mean  alpha_SiSi_err
+300 1 0 -0.0424222 0 1 0 -1.21556 0 0.196367 0.000575547 -0.566432 0.00183546 0.113888 0.00117724
+600 1 0 -0.0413329 0 1 0 -1.21556 0 0.195763 0.00081821 -0.573481 0.00158538 0.117601 0.00128738
+900 1 0 -0.0403644 0.000383223 1 0 -1.21556 0 0.194214 0.000943321 -0.582857 0.00113346 0.123102 0.00109168

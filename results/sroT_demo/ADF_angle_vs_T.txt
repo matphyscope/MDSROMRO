@@ -1,0 +1,4 @@
+# T  adf_CCC_deg_mean  adf_CCC_deg_err  adf_CCSi_deg_mean  adf_CCSi_deg_err  adf_CSiC_deg_mean  adf_CSiC_deg_err  adf_CSiN_deg_mean  adf_CSiN_deg_err  adf_CSiSi_deg_mean  adf_CSiSi_deg_err  adf_NSiN_deg_mean  adf_NSiN_deg_err  adf_NSiSi_deg_mean  adf_NSiSi_deg_err  adf_SiCSi_deg_mean  adf_SiCSi_deg_err  adf_SiNSi_deg_mean  adf_SiNSi_deg_err  adf_SiSiSi_deg_mean  adf_SiSiSi_deg_err
+300 119.5 0 119.5 0 111.5 0 109.5 0 105.5 0 103.5 0 95.5 0 119.5 0 119.5 0 112.5 0
+600 119.5 0 120.5 0 112.5 0 105.5 0 108.5 0 109.5 0 96.5 0 118.5 0 119.5 0 98.5 0
+900 119.5 0 119.5 0 111.5 0 108.5 0 108.5 0 96.5 0 96.5 0 118.5 0 119.5 0 98.5 0
