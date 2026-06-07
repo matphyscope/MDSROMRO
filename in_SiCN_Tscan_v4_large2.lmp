@@ -1,0 +1,1259 @@
+# in_SiCN_Tscan_v4_large.lmp (v3 + RDF cutoff 10, heating to 3000K)
+# ---------------------------------------------------------------------------
+# a-SiCN T-scan: 300K → 3000K (100K steps) → 3000K → 300K (direct cool)
+# ONE continuous in-situ run
+# ---------------------------------------------------------------------------
+#
+# OUTPUT PER TEMPERATURE POINT:
+#   rdf_T????.txt        partial g(r): Si-Si, Si-C, Si-N, C-C, C-N, N-N
+#   CN_T????.txt         coordination numbers (10 quantities)
+#   angles_T????.txt     ADF: N-Si-N, C-Si-C, C-Si-N, Si-C-Si, Si-N-Si, C-C-C
+#   thermo_T????.txt     density, PE, T, P  (time-averaged)
+#   dump.????K.lammpstrj atom trajectory during production (200 ps)
+#
+# DATA COLLECTION METHOD:
+#   fix ave/time 100 10 1000 → time-averaged over 200 ps production
+#   dump every 1000 steps    → 200 frames per temperature point
+#
+# MD ↔ EXPERIMENT SCALE (α = 1.50):
+#   T_exp = 300 + (T_MD - 300) / 1.50
+#   MD 3000K = Exp ~2100K
+#
+# HEATING : 300, 400, ..., 3000 K  (28 points)
+# COOLING : 3000K → 300K direct → equilibrate → collect
+#
+# USAGE:
+#   nohup mpirun -np 32 lmp -in in_SiCN_Tscan_unified_v3.lmp > log.tscan 2>&1 &
+# ---------------------------------------------------------------------------
+
+units           metal
+atom_style      atomic
+boundary        p p p
+
+read_data       SiCN_300K_final.data
+
+mass 1 28.09    # Si
+mass 2 12.01    # C
+mass 3 14.01    # N
+
+group gSi type 1
+group gC  type 2
+group gN  type 3
+
+variable NS equal count(gSi)
+variable NC equal count(gC)
+variable NN equal count(gN)
+
+pair_style      tersoff
+pair_coeff      * * SiCN.tersoff Si C N
+
+comm_modify     cutoff 12.0
+neighbor        2.0 bin
+neigh_modify    every 1 delay 0 check yes
+timestep        0.0005          # 0.5 fs
+
+thermo_style    custom step temp press vol pe ke etotal density
+thermo          2000
+
+velocity        all create 300 54321 dist gaussian mom yes rot yes
+
+# ===========================================================================
+# COMPUTES — defined once, active throughout entire run
+# ===========================================================================
+
+# Partial RDF: Si-Si, Si-C, Si-N, C-C, C-N, N-N
+compute allRDF all rdf 1000 1 1  1 2  1 3  2 2  2 3  3 3  cutoff 10.0
+
+# CN — Si-centred
+compute cSi_C  gSi coord/atom cutoff 2.25 2
+compute cSi_N  gSi coord/atom cutoff 2.15 3
+compute cSi_Si gSi coord/atom cutoff 2.70 1
+compute sSi_C  gSi reduce sum c_cSi_C
+compute sSi_N  gSi reduce sum c_cSi_N
+compute sSi_Si gSi reduce sum c_cSi_Si
+variable pSi_Si    equal c_sSi_Si/v_NS
+variable pSi_C     equal c_sSi_C/v_NS
+variable pSi_N     equal c_sSi_N/v_NS
+variable CN_Si     equal (c_sSi_Si+c_sSi_C+c_sSi_N)/v_NS
+variable CN_Si_SRO equal (c_sSi_C+c_sSi_N)/v_NS
+
+# CN — C-centred
+compute cC_C  gC coord/atom cutoff 1.85 2
+compute cC_Si gC coord/atom cutoff 2.25 1
+compute sC_C  gC reduce sum c_cC_C
+compute sC_Si gC reduce sum c_cC_Si
+variable pC_C  equal c_sC_C/v_NC
+variable pC_Si equal c_sC_Si/v_NC
+variable CN_C  equal (c_sC_C+c_sC_Si)/v_NC
+
+# CN — N-centred
+compute cN_Si gN coord/atom cutoff 2.15 1
+compute sN_Si gN reduce sum c_cN_Si
+variable pN_Si equal c_sN_Si/v_NN
+variable CN_N  equal c_sN_Si/v_NN
+
+# Thermo variables
+variable vdensity equal density
+variable vpe      equal pe
+variable vtemp    equal temp
+variable vpress   equal press
+
+# ADF — 6 triplets
+compute aNSiN  all adf 180 1 3 3 0.0 2.15 0.0 2.15   # N-Si-N
+compute aCSiC  all adf 180 1 2 2 0.0 2.25 0.0 2.25   # C-Si-C
+compute aCSiN  all adf 180 1 2 3 0.0 2.25 0.0 2.15   # C-Si-N
+compute aSiCSi all adf 180 2 1 1 0.0 2.25 0.0 2.25   # Si-C-Si
+compute aSiNSi all adf 180 3 1 1 0.0 2.15 0.0 2.15   # Si-N-Si
+compute aCCC   all adf 180 2 2 2 0.0 1.85 0.0 1.85   # C-C-C
+
+# ===========================================================================
+# SECTION 1 — HEATING: 300K → 1800K  (16 points, 100K interval)
+# ===========================================================================
+
+# ════════════════════════════════════════════════════════════════════
+# T0300  |  T_MD = 300 K  |  T_exp ≈ 300 K
+# ════════════════════════════════════════════════════════════════════
+fix  eq   all npt temp 300 300 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 300 300 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T0300 ─────────────────────────────────────────
+dump        traj all custom 1000 dump.300K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T0300.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T0300.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T0300.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T0300.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T0300  T_MD=300K  T_exp~300K"
+print "    Files: rdf_T0300.txt  CN_T0300.txt  angles_T0300.txt  thermo_T0300.txt  dump.300K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T0400  |  T_MD = 400 K  |  T_exp ≈ 366 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 300 400 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 400 400 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 400 400 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T0400 ─────────────────────────────────────────
+dump        traj all custom 1000 dump.400K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T0400.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T0400.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T0400.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T0400.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T0400  T_MD=400K  T_exp~366K"
+print "    Files: rdf_T0400.txt  CN_T0400.txt  angles_T0400.txt  thermo_T0400.txt  dump.400K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T0500  |  T_MD = 500 K  |  T_exp ≈ 433 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 400 500 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 500 500 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 500 500 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T0500 ─────────────────────────────────────────
+dump        traj all custom 1000 dump.500K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T0500.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T0500.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T0500.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T0500.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T0500  T_MD=500K  T_exp~433K"
+print "    Files: rdf_T0500.txt  CN_T0500.txt  angles_T0500.txt  thermo_T0500.txt  dump.500K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T0600  |  T_MD = 600 K  |  T_exp ≈ 500 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 500 600 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 600 600 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 600 600 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T0600 ─────────────────────────────────────────
+dump        traj all custom 1000 dump.600K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T0600.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T0600.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T0600.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T0600.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T0600  T_MD=600K  T_exp~500K"
+print "    Files: rdf_T0600.txt  CN_T0600.txt  angles_T0600.txt  thermo_T0600.txt  dump.600K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T0700  |  T_MD = 700 K  |  T_exp ≈ 566 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 600 700 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 700 700 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 700 700 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T0700 ─────────────────────────────────────────
+dump        traj all custom 1000 dump.700K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T0700.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T0700.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T0700.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T0700.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T0700  T_MD=700K  T_exp~566K"
+print "    Files: rdf_T0700.txt  CN_T0700.txt  angles_T0700.txt  thermo_T0700.txt  dump.700K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T0800  |  T_MD = 800 K  |  T_exp ≈ 633 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 700 800 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 800 800 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 800 800 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T0800 ─────────────────────────────────────────
+dump        traj all custom 1000 dump.800K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T0800.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T0800.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T0800.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T0800.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T0800  T_MD=800K  T_exp~633K"
+print "    Files: rdf_T0800.txt  CN_T0800.txt  angles_T0800.txt  thermo_T0800.txt  dump.800K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T0900  |  T_MD = 900 K  |  T_exp ≈ 700 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 800 900 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 900 900 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 900 900 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T0900 ─────────────────────────────────────────
+dump        traj all custom 1000 dump.900K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T0900.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T0900.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T0900.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T0900.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T0900  T_MD=900K  T_exp~700K"
+print "    Files: rdf_T0900.txt  CN_T0900.txt  angles_T0900.txt  thermo_T0900.txt  dump.900K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T1000  |  T_MD = 1000 K  |  T_exp ≈ 766 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 900 1000 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 1000 1000 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 1000 1000 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T1000 ─────────────────────────────────────────
+dump        traj all custom 1000 dump.1000K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T1000.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T1000.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T1000.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T1000.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T1000  T_MD=1000K  T_exp~766K"
+print "    Files: rdf_T1000.txt  CN_T1000.txt  angles_T1000.txt  thermo_T1000.txt  dump.1000K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T1100  |  T_MD = 1100 K  |  T_exp ≈ 833 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 1000 1100 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 1100 1100 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 1100 1100 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T1100 ─────────────────────────────────────────
+dump        traj all custom 1000 dump.1100K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T1100.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T1100.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T1100.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T1100.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T1100  T_MD=1100K  T_exp~833K"
+print "    Files: rdf_T1100.txt  CN_T1100.txt  angles_T1100.txt  thermo_T1100.txt  dump.1100K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T1200  |  T_MD = 1200 K  |  T_exp ≈ 900 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 1100 1200 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 1200 1200 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 1200 1200 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T1200 ─────────────────────────────────────────
+dump        traj all custom 1000 dump.1200K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T1200.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T1200.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T1200.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T1200.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T1200  T_MD=1200K  T_exp~900K"
+print "    Files: rdf_T1200.txt  CN_T1200.txt  angles_T1200.txt  thermo_T1200.txt  dump.1200K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T1300  |  T_MD = 1300 K  |  T_exp ≈ 966 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 1200 1300 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 1300 1300 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 1300 1300 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T1300 ─────────────────────────────────────────
+dump        traj all custom 1000 dump.1300K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T1300.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T1300.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T1300.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T1300.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T1300  T_MD=1300K  T_exp~966K"
+print "    Files: rdf_T1300.txt  CN_T1300.txt  angles_T1300.txt  thermo_T1300.txt  dump.1300K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T1400  |  T_MD = 1400 K  |  T_exp ≈ 1033 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 1300 1400 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 1400 1400 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 1400 1400 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T1400 ─────────────────────────────────────────
+dump        traj all custom 1000 dump.1400K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T1400.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T1400.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T1400.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T1400.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T1400  T_MD=1400K  T_exp~1033K"
+print "    Files: rdf_T1400.txt  CN_T1400.txt  angles_T1400.txt  thermo_T1400.txt  dump.1400K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T1500  |  T_MD = 1500 K  |  T_exp ≈ 1100 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 1400 1500 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 1500 1500 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 1500 1500 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T1500 ─────────────────────────────────────────
+dump        traj all custom 1000 dump.1500K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T1500.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T1500.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T1500.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T1500.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T1500  T_MD=1500K  T_exp~1100K"
+print "    Files: rdf_T1500.txt  CN_T1500.txt  angles_T1500.txt  thermo_T1500.txt  dump.1500K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T1600  |  T_MD = 1600 K  |  T_exp ≈ 1166 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 1500 1600 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 1600 1600 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 1600 1600 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T1600 ─────────────────────────────────────────
+dump        traj all custom 1000 dump.1600K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T1600.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T1600.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T1600.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T1600.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T1600  T_MD=1600K  T_exp~1166K"
+print "    Files: rdf_T1600.txt  CN_T1600.txt  angles_T1600.txt  thermo_T1600.txt  dump.1600K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T1700  |  T_MD = 1700 K  |  T_exp ≈ 1233 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 1600 1700 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 1700 1700 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 1700 1700 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T1700 ─────────────────────────────────────────
+dump        traj all custom 1000 dump.1700K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T1700.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T1700.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T1700.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T1700.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T1700  T_MD=1700K  T_exp~1233K"
+print "    Files: rdf_T1700.txt  CN_T1700.txt  angles_T1700.txt  thermo_T1700.txt  dump.1700K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T1800  |  T_MD = 1800 K  |  T_exp ≈ 1300 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 1700 1800 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 1800 1800 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 1800 1800 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T1800 ─────────────────────────────────────────
+dump        traj all custom 1000 dump.1800K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T1800.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T1800.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T1800.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T1800.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T1800  T_MD=1800K  T_exp~1300K"
+print "    Files: rdf_T1800.txt  CN_T1800.txt  angles_T1800.txt  thermo_T1800.txt  dump.1800K.lammpstrj"
+
+unfix prod
+
+
+# ════════════════════════════════════════════════════════════════════
+# T1900  |  T_MD = 1900 K  |  T_exp ≈ 1366 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 1800 1900 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 1900 1900 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 1900 1900 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T1900 ──────────────────────
+dump        traj all custom 1000 dump.1900K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T1900.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T1900.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T1900.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T1900.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T1900  T_MD=1900K  T_exp~1366K"
+print "    Files: rdf_T1900.txt  CN_T1900.txt  angles_T1900.txt  thermo_T1900.txt  dump.1900K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T2000  |  T_MD = 2000 K  |  T_exp ≈ 1433 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 1900 2000 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 2000 2000 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 2000 2000 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T2000 ──────────────────────
+dump        traj all custom 1000 dump.2000K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T2000.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T2000.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T2000.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T2000.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T2000  T_MD=2000K  T_exp~1433K"
+print "    Files: rdf_T2000.txt  CN_T2000.txt  angles_T2000.txt  thermo_T2000.txt  dump.2000K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T2100  |  T_MD = 2100 K  |  T_exp ≈ 1500 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 2000 2100 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 2100 2100 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 2100 2100 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T2100 ──────────────────────
+dump        traj all custom 1000 dump.2100K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T2100.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T2100.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T2100.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T2100.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T2100  T_MD=2100K  T_exp~1500K"
+print "    Files: rdf_T2100.txt  CN_T2100.txt  angles_T2100.txt  thermo_T2100.txt  dump.2100K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T2200  |  T_MD = 2200 K  |  T_exp ≈ 1566 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 2100 2200 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 2200 2200 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 2200 2200 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T2200 ──────────────────────
+dump        traj all custom 1000 dump.2200K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T2200.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T2200.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T2200.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T2200.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T2200  T_MD=2200K  T_exp~1566K"
+print "    Files: rdf_T2200.txt  CN_T2200.txt  angles_T2200.txt  thermo_T2200.txt  dump.2200K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T2300  |  T_MD = 2300 K  |  T_exp ≈ 1633 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 2200 2300 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 2300 2300 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 2300 2300 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T2300 ──────────────────────
+dump        traj all custom 1000 dump.2300K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T2300.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T2300.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T2300.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T2300.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T2300  T_MD=2300K  T_exp~1633K"
+print "    Files: rdf_T2300.txt  CN_T2300.txt  angles_T2300.txt  thermo_T2300.txt  dump.2300K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T2400  |  T_MD = 2400 K  |  T_exp ≈ 1700 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 2300 2400 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 2400 2400 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 2400 2400 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T2400 ──────────────────────
+dump        traj all custom 1000 dump.2400K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T2400.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T2400.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T2400.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T2400.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T2400  T_MD=2400K  T_exp~1700K"
+print "    Files: rdf_T2400.txt  CN_T2400.txt  angles_T2400.txt  thermo_T2400.txt  dump.2400K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T2500  |  T_MD = 2500 K  |  T_exp ≈ 1766 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 2400 2500 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 2500 2500 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 2500 2500 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T2500 ──────────────────────
+dump        traj all custom 1000 dump.2500K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T2500.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T2500.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T2500.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T2500.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T2500  T_MD=2500K  T_exp~1766K"
+print "    Files: rdf_T2500.txt  CN_T2500.txt  angles_T2500.txt  thermo_T2500.txt  dump.2500K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T2600  |  T_MD = 2600 K  |  T_exp ≈ 1833 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 2500 2600 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 2600 2600 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 2600 2600 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T2600 ──────────────────────
+dump        traj all custom 1000 dump.2600K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T2600.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T2600.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T2600.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T2600.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T2600  T_MD=2600K  T_exp~1833K"
+print "    Files: rdf_T2600.txt  CN_T2600.txt  angles_T2600.txt  thermo_T2600.txt  dump.2600K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T2700  |  T_MD = 2700 K  |  T_exp ≈ 1900 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 2600 2700 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 2700 2700 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 2700 2700 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T2700 ──────────────────────
+dump        traj all custom 1000 dump.2700K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T2700.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T2700.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T2700.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T2700.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T2700  T_MD=2700K  T_exp~1900K"
+print "    Files: rdf_T2700.txt  CN_T2700.txt  angles_T2700.txt  thermo_T2700.txt  dump.2700K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T2800  |  T_MD = 2800 K  |  T_exp ≈ 1966 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 2700 2800 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 2800 2800 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 2800 2800 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T2800 ──────────────────────
+dump        traj all custom 1000 dump.2800K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T2800.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T2800.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T2800.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T2800.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T2800  T_MD=2800K  T_exp~1966K"
+print "    Files: rdf_T2800.txt  CN_T2800.txt  angles_T2800.txt  thermo_T2800.txt  dump.2800K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T2900  |  T_MD = 2900 K  |  T_exp ≈ 2033 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 2800 2900 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 2900 2900 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 2900 2900 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T2900 ──────────────────────
+dump        traj all custom 1000 dump.2900K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T2900.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T2900.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T2900.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T2900.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T2900  T_MD=2900K  T_exp~2033K"
+print "    Files: rdf_T2900.txt  CN_T2900.txt  angles_T2900.txt  thermo_T2900.txt  dump.2900K.lammpstrj"
+
+unfix prod
+
+# ════════════════════════════════════════════════════════════════════
+# T3000  |  T_MD = 3000 K  |  T_exp ≈ 2100 K
+# ════════════════════════════════════════════════════════════════════
+fix  ramp all npt temp 2900 3000 0.1 iso 0.0 0.0 1.0
+run  40000              # 20 ps ramp
+unfix ramp
+
+fix  eq   all npt temp 3000 3000 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq
+
+fix  prod all npt temp 3000 3000 0.1 iso 0.0 0.0 1.0
+# ── Data collection: T3000 ──────────────────────
+dump        traj all custom 1000 dump.3000K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_T3000.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_T3000.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_T3000.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_T3000.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: T3000  T_MD=3000K  T_exp~2100K"
+print "    Files: rdf_T3000.txt  CN_T3000.txt  angles_T3000.txt  thermo_T3000.txt  dump.3000K.lammpstrj"
+
+unfix prod
+
+# ===========================================================================
+# SECTION 2 — COOLING: 3000K → 300K  (direct, no intermediate hold)
+# Mirrors experiment: cool directly from T_max to 300K
+# Ramp rate: 2700K / 135ps = 20 K/ps
+# ===========================================================================
+
+fix  cool all npt temp 3000 300 0.1 iso 0.0 0.0 1.0
+run  270000             # 135 ps  (3000 → 300K at 20 K/ps)
+unfix cool
+
+# ── Equilibrate at 300K ──────────────────────────────────────────────────
+fix  eq_cool all npt temp 300 300 0.1 iso 0.0 0.0 1.0
+run  400000             # 200 ps equilibration
+unfix eq_cool
+
+# ── Collect after-cooling 300K structure ─────────────────────────────────
+fix  prod_cool all npt temp 300 300 0.1 iso 0.0 0.0 1.0
+# ── Data collection: cool_T0300 ─────────────────────────────────────────
+dump        traj all custom 1000 dump.cool_300K.lammpstrj id type element x y z
+dump_modify traj element Si C N sort id
+fix  fRDF all ave/time 100 10 1000 c_allRDF[*] &
+     file rdf_cool_T0300.txt mode vector
+fix  fCN  all ave/time 100 10 1000 &
+     v_CN_Si v_CN_Si_SRO v_CN_C v_CN_N &
+     v_pSi_Si v_pSi_C v_pSi_N v_pC_C v_pC_Si v_pN_Si &
+     file CN_cool_T0300.txt
+fix  fADF all ave/time 100 10 1000 &
+     c_aNSiN[*] c_aCSiC[*] c_aCSiN[*] &
+     c_aSiCSi[*] c_aSiNSi[*] c_aCCC[*] &
+     file angles_cool_T0300.txt mode vector
+fix  fThm all ave/time 100 10 1000 &
+     v_vtemp v_vpress v_vdensity v_vpe &
+     file thermo_cool_T0300.txt
+run  400000             # 200 ps production
+undump traj
+unfix fRDF
+unfix fCN
+unfix fADF
+unfix fThm
+print ">>> DONE: cool_T0300  T_MD=300K  T_exp~300K"
+print "    Files: rdf_cool_T0300.txt  CN_cool_T0300.txt  angles_cool_T0300.txt  thermo_cool_T0300.txt  dump.cool_300K.lammpstrj"
+
+unfix prod_cool
+
+# ===========================================================================
+# FINAL
+# ===========================================================================
+min_style cg
+minimize  1.0e-6 1.0e-8 10000 100000
+write_data SiCN_Tscan_final.data
+
+print "============================================================"
+print "T-SCAN COMPLETE"
+print "Heating : T0300 ~ T1800  (16 points)"
+print "Cooling : cool_T0300     (1 point)"
+print "Per point: rdf / CN / angles / thermo / dump"
+print "Final structure: SiCN_Tscan_final.data"
+print "============================================================"
