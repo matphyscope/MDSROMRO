@@ -20,6 +20,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..sro.rdf import partial_rdf
+from ..core._compat import trapezoid
 
 
 def _sine_transform(r, g, rho, ci, cj, q, lorch=True):
@@ -30,9 +31,9 @@ def _sine_transform(r, g, rho, ci, cj, q, lorch=True):
     S = np.empty_like(q)
     for k, qq in enumerate(q):
         if qq < 1e-9:
-            S[k] = pre * np.trapezoid(integrand * r, r)
+            S[k] = pre * trapezoid(integrand * r, r)
         else:
-            S[k] = pre * np.trapezoid(integrand * np.sin(qq * r) / qq, r)
+            S[k] = pre * trapezoid(integrand * np.sin(qq * r) / qq, r)
     return S
 
 

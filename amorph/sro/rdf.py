@@ -22,6 +22,7 @@ import numpy as np
 from ..core.frame import species_of, unique_pairs
 from ..core.neighbors import NeighborCache
 from ..core.average import block_average
+from ..core._compat import trapezoid
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -127,7 +128,7 @@ def coordination(r, g, rho_b, r_cut, r_min=0.0):
     """
     sel = (r >= r_min) & (r <= r_cut)
     integrand = 4.0 * np.pi * r[sel] ** 2 * rho_b * g[sel]
-    return float(np.trapezoid(integrand, r[sel]))
+    return float(trapezoid(integrand, r[sel]))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
