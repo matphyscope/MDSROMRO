@@ -1,6 +1,6 @@
 ========================================================================
-amorph 0.1.0 analyze: data/dump_T0300.lammpstrj
-generated 2026-06-07 13:24:49   ->  results/dump_T0300
+amorph 0.1.0 analyze: data/dump_T0300.lammpstrj [SINGLE]
+generated 2026-06-07 13:31:13   ->  results/dump_T0300
 ========================================================================
 
 [dump_T0300.lammpstrj] frames=101 atoms=997 species=['C', 'N', 'Si']

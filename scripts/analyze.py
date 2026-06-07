@@ -6,11 +6,15 @@ Every figure is written as PNG *and* its data as .txt; every numeric table is
 written as .txt; the full console log is saved to report.txt. Output goes to
 --out (default: results/<stem>/).
 
+The mode is auto-detected from the path: a FILE -> single-structure analysis,
+a DIRECTORY -> temperature sweep over the dumps it contains. (--single/--sweep
+force a mode.)
+
 SINGLE structure (full SRO+MRO figure set):
   python3 scripts/analyze.py data/dump_T0300.lammpstrj --type-map 1:Si,2:C,3:N
 
-TEMPERATURE SWEEP (auto-discovers dumps in a directory):
-  python3 scripts/analyze.py data/ --sweep --type-map 1:Si,2:C,3:N
+TEMPERATURE SWEEP (just point at the folder of per-T dumps):
+  python3 scripts/analyze.py data/ --type-map 1:Si,2:C,3:N
 """
 from __future__ import annotations
 import argparse
@@ -240,8 +244,12 @@ def analyze_sweep(directory, CM, rep, *, type_map, prod, stride, args):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("path", help="dump/.data file (single) or directory (with --sweep)")
-    ap.add_argument("--sweep", action="store_true", help="temperature-sweep mode")
+    ap.add_argument("path", help="a single dump/.data FILE, or a DIRECTORY of "
+                                 "temperature dumps (auto-detected)")
+    ap.add_argument("--sweep", dest="sweep", action="store_true", default=None,
+                    help="force temperature-sweep mode (default: auto if path is a dir)")
+    ap.add_argument("--single", dest="sweep", action="store_false",
+                    help="force single-structure mode")
     ap.add_argument("--out", default=None, help="output dir (default results/<stem>)")
     ap.add_argument("--type-map", default="1:Si,2:C,3:N")
     ap.add_argument("--cutoffs", default=None)
@@ -263,11 +271,15 @@ def main():
     tmap = parse_type_map(args.type_map)
     prod = parse_prod(args.prod)
 
-    stem = Path(args.path.rstrip("/")).stem or "sweep"
-    out = args.out or f"results/{'sweep_' if args.sweep else ''}{stem}"
-    rep = Reporter(out, title=f"amorph {amorph.__version__} analyze: {args.path}")
+    # auto-detect: directory -> sweep, file -> single (unless forced via flags)
+    is_sweep = Path(args.path).is_dir() if args.sweep is None else args.sweep
 
-    if args.sweep:
+    stem = Path(args.path.rstrip("/")).stem or "sweep"
+    out = args.out or f"results/{'sweep_' if is_sweep else ''}{stem}"
+    rep = Reporter(out, title=f"amorph {amorph.__version__} analyze: {args.path} "
+                             f"[{'SWEEP' if is_sweep else 'SINGLE'}]")
+
+    if is_sweep:
         analyze_sweep(args.path, CM, rep, type_map=tmap, prod=prod, stride=args.stride, args=args)
     else:
         analyze_single(args.path, CM, rep, type_map=tmap, prod=prod, stride=args.stride, args=args)
