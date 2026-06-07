@@ -18,11 +18,11 @@ LAMMPS 트래젝토리(dump)·데이터 파일로부터 비정질 재료의 **�
 amorph/
   core/    io(리더) · frame · neighbors(cutoff행렬·이웃탐색) · cutoffs · average(시간평균)
   sro/     rdf · coordination(CN+ADF) · csro · voronoi · boo · hybridization · tetrahedra
-  mro/     rings · bhatia_thornton · clusters · dihedral · tetra_connectivity   ← 작업 중
+  mro/     rings · bhatia_thornton · clusters · dihedral · tetra_connectivity
   presets  SiCN 전용 type_map / cutoff / ADF 삼중항
 notebooks/
-  SRO_analysis.ipynb    ← 단거리 규칙성 (완성)
-  MRO_analysis.ipynb    ← 중거리 규칙성 (작업 중)
+  SRO_analysis.ipynb    ← 단거리 규칙성
+  MRO_analysis.ipynb    ← 중거리 규칙성
 ```
 
 ## 빠른 사용

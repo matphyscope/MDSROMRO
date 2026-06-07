@@ -62,6 +62,16 @@ class Frame:
         """Boolean mask selecting atoms of a given element."""
         return self.elements == element
 
+    def relabeled(self, mapping) -> "Frame":
+        """New Frame with elements remapped (shares coords/box).
+
+        ``mapping`` is {old_element: new_label}; unmapped elements are kept.
+        Useful for pseudo-binary grouping (e.g. {'Si':'A','N':'A','C':'B'}).
+        """
+        new_el = np.array([mapping.get(e, e) for e in self.elements], dtype=str)
+        return Frame(coords=self.coords, elements=new_el, box=self.box,
+                     timestep=self.timestep)
+
     def count(self, element) -> int:
         return int(np.count_nonzero(self.mask(element)))
 
