@@ -164,7 +164,7 @@ def temperature_series(dumps, cutoffs: CutoffMatrix, *, type_map=None,
     """
     entries = [d for d in dumps if include_cool or not d["cool"]]
     T, labels, cool = [], [], []
-    col_mean, col_err = {}, {}
+    per_T = []                       # {name: (mean, err)} per temperature
 
     n_tot = len(entries)
     tasks = [(d, d["path"], type_map, prod_range, stride, cutoffs, scalar_kwargs)
@@ -173,13 +173,19 @@ def temperature_series(dumps, cutoffs: CutoffMatrix, *, type_map=None,
         if verbose else None
     for d, scalars in pmap(_series_task, tasks, jobs=jobs, on_done=cb):
         T.append(d["T"]); labels.append(d["label"]); cool.append(d["cool"])
-        for name, (m, e) in scalars.items():
-            col_mean.setdefault(name, []).append(m)
-            col_err.setdefault(name, []).append(e)
+        per_T.append(scalars)
 
-    columns = {name: {"mean": np.array(col_mean[name]),
-                      "err": np.array(col_err[name])}
-               for name in col_mean}
+    # union of names; a metric absent at some T (e.g. a bond that doesn't occur)
+    # is filled with NaN so all columns align with the temperature axis
+    names = []
+    seen = set()
+    for scalars in per_T:
+        for k in scalars:
+            if k not in seen:
+                seen.add(k); names.append(k)
+    columns = {k: {"mean": np.array([s.get(k, (np.nan, np.nan))[0] for s in per_T]),
+                   "err": np.array([s.get(k, (np.nan, np.nan))[1] for s in per_T])}
+               for k in names}
     return dict(T=np.array(T), labels=labels, cool=np.array(cool),
                 columns=columns)
 

@@ -169,15 +169,25 @@ def sro_temperature_series(dumps, cutoffs: CutoffMatrix, *, type_map=None,
     cb = (lambda k: print(f"  [{k}/{n_tot}] temperatures done", flush=True)) if verbose else None
 
     T, labels, cool = [], [], []
-    col_mean, col_err = defaultdict(list), defaultdict(list)
     curves = {}
+    per_T = []                      # list of {name: (mean, err)} dicts, one per T
     for d, cols, cv in pmap(_sro_task, tasks, jobs=jobs, on_done=cb):
         T.append(d["T"]); labels.append(d["label"]); cool.append(d["cool"])
         curves[d["label"]] = cv
-        for name, (m, e) in cols.items():
-            col_mean[name].append(m); col_err[name].append(e)
+        per_T.append(cols)
 
-    columns = {name: {"mean": np.array(col_mean[name]), "err": np.array(col_err[name])}
-               for name in col_mean}
+    # union of all metric names (a metric may be absent at some temperatures,
+    # e.g. a bond/triplet that does not occur at every T) — fill gaps with NaN
+    names = []
+    seen = set()
+    for cols in per_T:
+        for k in cols:
+            if k not in seen:
+                seen.add(k); names.append(k)
+    columns = {}
+    for k in names:
+        ms = np.array([cols.get(k, (np.nan, np.nan))[0] for cols in per_T])
+        es = np.array([cols.get(k, (np.nan, np.nan))[1] for cols in per_T])
+        columns[k] = {"mean": ms, "err": es}
     return dict(T=np.array(T), labels=labels, cool=np.array(cool),
                 columns=columns, curves=curves)
