@@ -120,14 +120,21 @@ def main():
         do_boo=not args.no_boo, do_voronoi=not args.no_voronoi,
         do_hyb=not args.no_hyb, verbose=True)
 
-    # full numeric table
+    # full numeric table (defensive: tolerate any column shorter than the T axis)
     names = sorted(S["columns"])
+    nT = len(S["T"])
+
+    def _cell(n, i):
+        m = S["columns"][n]["mean"]; e = S["columns"][n]["err"]
+        if i < len(m) and np.isfinite(m[i]):
+            return f"{m[i]:>8.4f}±{e[i]:<7.4f}"
+        return f"{'nan':>8} {'':<7}"
+
     hdr = f"{'T(K)':>7} {'cool':>5} " + " ".join(f"{n:>16}" for n in names)
     lines = [hdr]
     for i, T in enumerate(S["T"]):
         row = f"{T:>7} {'y' if S['cool'][i] else '':>5} "
-        row += " ".join(f"{S['columns'][n]['mean'][i]:>8.4f}±{S['columns'][n]['err'][i]:<7.4f}"
-                        for n in names)
+        row += " ".join(_cell(n, i) for n in names)
         lines.append(row)
     rep.save_table("sro_sweep_table", "\n".join(lines))
     rep.print(f"\ntracked {len(names)} structural metrics across {len(S['T'])} temperatures")
