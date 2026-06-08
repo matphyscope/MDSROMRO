@@ -134,7 +134,9 @@ def analyze_single(path, CM, rep, *, type_map, prod, stride, args):
                 continue
             ax.plot(ADF["theta"], p, label=f"{t[0]}-{t[1]}-{t[2]}")
             data[f"{t[0]}{t[1]}{t[2]}"] = p
-            rep.print(f"  {t[0]}-{t[1]}-{t[2]}: {ADF['theta'][np.nanargmax(p)]:.1f}°")
+            mp = rdf.measure_peaks(ADF["theta"], p, search=(30.0, 175.0), fit_halfwidth=25.0)
+            rep.print(f"  {t[0]}-{t[1]}-{t[2]}: peak {mp['peak_r']:.2f}°  "
+                      f"FWHM {mp['fwhm']:.2f}°  (R²={mp['r2']:.3f})")
         ax.set_xlabel("angle (deg)"); ax.set_ylabel("P(θ)"); ax.set_title("Bond-angle distributions")
         ax.legend(fontsize=8, ncol=2); ax.grid(alpha=0.3)
         rep.save_fig(fig, "adf", data=data); plt.close(fig)

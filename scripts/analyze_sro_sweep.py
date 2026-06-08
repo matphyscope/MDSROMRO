@@ -153,8 +153,10 @@ def main():
                 "Coordination number (total) vs T", "CN", "CN_total_vs_T")
     _plot_group(rep, S, [n for n in _cols_matching(S, "CN_") if n.count("_") == 2],
                 "Partial coordination A→B vs T", "CN", "CN_partial_vs_T")
-    _plot_group(rep, S, _cols_matching(S, "adf_"),
-                "Bond-angle (ADF) peak vs T", "angle (deg)", "ADF_angle_vs_T")
+    _plot_group(rep, S, _cols_matching(S, "adf_", "_deg"),
+                "Bond-angle (ADF) Gaussian-fit peak vs T", "angle (deg)", "ADF_peak_vs_T")
+    _plot_group(rep, S, _cols_matching(S, "adf_", "_fwhm"),
+                "Bond-angle (ADF) width FWHM vs T", "FWHM (deg)", "ADF_fwhm_vs_T")
     _plot_group(rep, S, [n for n in _cols_matching(S, "alpha_") if n[6] != n[7]],
                 "Warren–Cowley chemical SRO α vs T", "α", "CSRO_alpha_vs_T")
     _plot_group(rep, S, _cols_matching(S, "q_"),

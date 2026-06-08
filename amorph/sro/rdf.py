@@ -171,9 +171,10 @@ def measure_peaks(r, g, search=(0.5, None), fit_halfwidth=0.4):
     if left is not None and right is not None and right > left:
         fwhm = float(right - left)
 
-    # Gaussian fit goodness in a window around the peak
+    # Gaussian fit in a window around the peak → sub-bin peak position & width
     win = (rr >= peak_r - fit_halfwidth) & (rr <= peak_r + fit_halfwidth)
     r2 = rmse = np.nan
+    peak_fit = fwhm_fit = height_fit = np.nan
     if np.count_nonzero(win) >= 4:
         try:
             p0 = [height, peak_r, fwhm / 2.355 if fwhm == fwhm else 0.1, 0.0]
@@ -184,6 +185,18 @@ def measure_peaks(r, g, search=(0.5, None), fit_halfwidth=0.4):
             ss_tot = float(np.sum((gg[win] - np.mean(gg[win])) ** 2))
             r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else np.nan
             rmse = float(np.sqrt(np.mean(resid ** 2)))
+            a, mu, sigma, c = popt
+            # accept the fitted centre only if it is sane (near the argmax)
+            if abs(mu - peak_r) <= fit_halfwidth and sigma != 0:
+                peak_fit = float(mu)
+                fwhm_fit = float(2.3548 * abs(sigma))
+                height_fit = float(a + c)
         except (RuntimeError, ValueError):
             pass
-    return dict(peak_r=peak_r, height=height, fwhm=fwhm, r2=r2, rmse=rmse)
+
+    # prefer the Gaussian-fit values; fall back to argmax/half-max if the fit failed
+    return dict(peak_r=peak_fit if peak_fit == peak_fit else peak_r,
+                height=height_fit if height_fit == height_fit else height,
+                fwhm=fwhm_fit if fwhm_fit == fwhm_fit else fwhm,
+                r2=r2, rmse=rmse,
+                peak_r_raw=peak_r, fwhm_raw=fwhm)

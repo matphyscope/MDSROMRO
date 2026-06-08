@@ -30,19 +30,6 @@ from .core import cutoffs as cutmod
 from .sro import rdf, coordination, csro, tetrahedra, boo, voronoi, hybridization
 
 
-def _parabolic_peak(x, y):
-    """Peak x of y via 3-point parabolic interpolation around argmax (sub-bin)."""
-    y = np.asarray(y, float)
-    i = int(np.nanargmax(y))
-    if 0 < i < len(y) - 1 and np.all(np.isfinite(y[i-1:i+2])):
-        y0, y1, y2 = y[i-1], y[i], y[i+1]
-        denom = (y0 - 2*y1 + y2)
-        if denom != 0:
-            d = 0.5 * (y0 - y2) / denom          # offset in bins, |d|<=0.5
-            return float(x[i] + d * (x[1] - x[0]))
-    return float(x[i])
-
-
 def _triplets(sp, cutoffs):
     out = []
     for A in sp:
@@ -98,18 +85,22 @@ def sro_scalars(traj, cutoffs: CutoffMatrix, *, n_blocks=5, r_max=8.0, nbins=400
             if cutoffs.get(A, B) > 0:
                 cols[f"CN_{A}_{B}"] = CN["cn"][A][B]
 
-    # ADF — peak angle (sub-bin via parabolic interp) + keep full histogram curve
+    # ADF — Gaussian-fit peak angle + angular FWHM + mean; keep full histogram
     adf_curves = {}
     tri = _triplets(sp, cutoffs)
     if tri:
         ADF = coordination.adf(traj, tri, cutoffs, n_blocks=n_blocks)
-        adf_curves["theta"] = ADF["theta"]
+        th = ADF["theta"]
+        adf_curves["theta"] = th
         for t in tri:
             p = ADF[t]["p"]
             key = f"{t[0]}{t[1]}{t[2]}"
             if not np.all(np.isnan(p)):
-                cols[f"adf_{key}_deg"] = (_parabolic_peak(ADF["theta"], p), 0.0)
-                cols[f"adf_{key}_mean"] = (float(np.nansum(ADF["theta"] * p) /
+                # fit the main peak (ignore the noisy <30° region), window ±25°
+                m = rdf.measure_peaks(th, p, search=(30.0, 175.0), fit_halfwidth=25.0)
+                cols[f"adf_{key}_deg"] = (float(m["peak_r"]), 0.0)     # Gaussian centre
+                cols[f"adf_{key}_fwhm"] = (float(m["fwhm"]), 0.0)      # angular width
+                cols[f"adf_{key}_mean"] = (float(np.nansum(th * p) /
                                                  np.nansum(p)), 0.0)
                 adf_curves[key] = p
 
