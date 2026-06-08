@@ -176,7 +176,7 @@ def main():
     rep.print("plotting g(r) curve overlays across T ...")
     labels = S["labels"]
     r = S["curves"][labels[0]]["r"]
-    pair_keys = [k for k in S["curves"][labels[0]] if k not in ("r",)]
+    pair_keys = [k for k in S["curves"][labels[0]] if k not in ("r", "adf")]
     for key in pair_keys:
         fig, ax = plt.subplots(figsize=(7, 4.4))
         data = {"r": r}
@@ -186,6 +186,26 @@ def main():
         ax.set_xlabel("r (Å)"); ax.set_ylabel("g(r)")
         ax.set_title(f"{key} g(r) vs temperature"); ax.legend(fontsize=8); ax.grid(alpha=0.3)
         rep.save_fig(fig, f"gr_curve_{key}", data=data); plt.close(fig)
+
+    # ---- ADF histogram overlays across temperature, one figure per triplet
+    adf0 = S["curves"][labels[0]].get("adf", {})
+    if adf0 and "theta" in adf0:
+        rep.print("plotting ADF histogram overlays across T ...")
+        theta = adf0["theta"]
+        tri_keys = [k for k in adf0 if k != "theta"]
+        for tk in tri_keys:
+            fig, ax = plt.subplots(figsize=(7, 4.4))
+            data = {"theta_deg": theta}
+            for lab in labels:
+                p = S["curves"][lab].get("adf", {}).get(tk)
+                if p is None:
+                    continue
+                ax.plot(theta, p, label=lab)
+                data[f"P_{lab}"] = p
+            ax.set_xlabel("angle (deg)"); ax.set_ylabel("P(θ)")
+            ax.set_title(f"{tk[0]}-{tk[1]}-{tk[2]} bond-angle distribution vs T")
+            ax.legend(fontsize=8); ax.grid(alpha=0.3); ax.set_xlim(0, 180)
+            rep.save_fig(fig, f"adf_curve_{tk}", data=data); plt.close(fig)
 
     rep.flush()
     print(f"\nAll SRO T-sweep outputs in: {out}/")
