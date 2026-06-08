@@ -67,6 +67,10 @@ def main():
     ap.add_argument("path", help="directory of per-temperature dumps")
     ap.add_argument("--out", default=None)
     ap.add_argument("--type-map", default="1:Si,2:C,3:N")
+    ap.add_argument("--cutoffs", default=None,
+                    help="override bond cutoffs (Å), e.g. for ReaxFF: "
+                         "C-C:1.75,C-Si:2.09,N-N:1.81,N-Si:2.35,Si-Si:2.78 "
+                         "(unlisted pairs -> non-bonded). Default: SiCN/Tersoff preset.")
     ap.add_argument("--prod", default=None)
     ap.add_argument("--stride", type=int, default=4)
     ap.add_argument("--rmax", type=float, default=8.0)
@@ -82,7 +86,10 @@ def main():
     ap.add_argument("--no-hyb", action="store_true")
     args = ap.parse_args()
 
-    CM = core.CutoffMatrix(presets.SICN_CUTOFFS, default=0.0)
+    cdict = (None if not args.cutoffs else
+             {tuple(p.split("-")): float(rc)
+              for p, rc in (t.split(":") for t in args.cutoffs.split(","))})
+    CM = core.CutoffMatrix(cdict or presets.SICN_CUTOFFS, default=0.0)
     tmap = parse_type_map(args.type_map)
     if args.bin_width:
         args.nbins = max(1, round(args.rmax / args.bin_width))
@@ -102,7 +109,8 @@ def main():
     if not dumps:
         rep.print("no dumps found — check path / filename pattern"); rep.flush(); return
 
-    rep.print(f"\ng(r): r_max={args.rmax} Å, nbins={args.nbins} "
+    rep.print(f"\ncutoffs: {CM}")
+    rep.print(f"g(r): r_max={args.rmax} Å, nbins={args.nbins} "
               f"→ bin width = {args.rmax/args.nbins:.4f} Å "
               f"(peak r/FWHM are Gaussian-fit, sub-bin precise)")
     rep.print(f"computing full SRO at each temperature (jobs={args.jobs}) ...")
