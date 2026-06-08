@@ -1,0 +1,64 @@
+========================================================================
+amorph 0.1.0 SRO T-sweep: data/
+generated 2026-06-07 22:50:25   ->  results/sroT_demo
+========================================================================
+discovered 3 temperature dumps:
+  300K           dump_T0300.lammpstrj
+  600K           dump_T0600.lammpstrj
+  900K           dump_T0900.lammpstrj
+
+computing full SRO at each temperature (jobs=3) ...
+[saved] results/sroT_demo/sro_sweep_table.txt
+
+tracked 94 structural metrics across 3 temperatures
+
+plotting property-vs-temperature ...
+[saved] results/sroT_demo/grpeak_position_vs_T.png
+[saved] results/sroT_demo/grpeak_position_vs_T.txt
+[saved] results/sroT_demo/grpeak_fwhm_vs_T.png
+[saved] results/sroT_demo/grpeak_fwhm_vs_T.txt
+[saved] results/sroT_demo/grpeak_height_vs_T.png
+[saved] results/sroT_demo/grpeak_height_vs_T.txt
+[saved] results/sroT_demo/shell_edge_vs_T.png
+[saved] results/sroT_demo/shell_edge_vs_T.txt
+[saved] results/sroT_demo/CN_total_vs_T.png
+[saved] results/sroT_demo/CN_total_vs_T.txt
+[saved] results/sroT_demo/CN_partial_vs_T.png
+[saved] results/sroT_demo/CN_partial_vs_T.txt
+[saved] results/sroT_demo/ADF_angle_vs_T.png
+[saved] results/sroT_demo/ADF_angle_vs_T.txt
+[saved] results/sroT_demo/CSRO_alpha_vs_T.png
+[saved] results/sroT_demo/CSRO_alpha_vs_T.txt
+[saved] results/sroT_demo/tetra_q_vs_T.png
+[saved] results/sroT_demo/tetra_q_vs_T.txt
+[saved] results/sroT_demo/BOO_Q6_vs_T.png
+[saved] results/sroT_demo/BOO_Q6_vs_T.txt
+[saved] results/sroT_demo/BOO_Q4_vs_T.png
+[saved] results/sroT_demo/BOO_Q4_vs_T.txt
+[saved] results/sroT_demo/voronoi_volume_vs_T.png
+[saved] results/sroT_demo/voronoi_volume_vs_T.txt
+[saved] results/sroT_demo/voronoi_faces_vs_T.png
+[saved] results/sroT_demo/voronoi_faces_vs_T.txt
+[saved] results/sroT_demo/density_vs_T.png
+[saved] results/sroT_demo/density_vs_T.txt
+[saved] results/sroT_demo/hyb_CN3-planar_vs_T.png
+[saved] results/sroT_demo/hyb_CN3-planar_vs_T.txt
+[saved] results/sroT_demo/hyb_CN4_vs_T.png
+[saved] results/sroT_demo/hyb_CN4_vs_T.txt
+[saved] results/sroT_demo/hyb_CN3-pyramidal_vs_T.png
+[saved] results/sroT_demo/hyb_CN3-pyramidal_vs_T.txt
+plotting g(r) curve overlays across T ...
+[saved] results/sroT_demo/gr_curve_total.png
+[saved] results/sroT_demo/gr_curve_total.txt
+[saved] results/sroT_demo/gr_curve_CC.png
+[saved] results/sroT_demo/gr_curve_CC.txt
+[saved] results/sroT_demo/gr_curve_CN.png
+[saved] results/sroT_demo/gr_curve_CN.txt
+[saved] results/sroT_demo/gr_curve_CSi.png
+[saved] results/sroT_demo/gr_curve_CSi.txt
+[saved] results/sroT_demo/gr_curve_NN.png
+[saved] results/sroT_demo/gr_curve_NN.txt
+[saved] results/sroT_demo/gr_curve_NSi.png
+[saved] results/sroT_demo/gr_curve_NSi.txt
+[saved] results/sroT_demo/gr_curve_SiSi.png
+[saved] results/sroT_demo/gr_curve_SiSi.txt
