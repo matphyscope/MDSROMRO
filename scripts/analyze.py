@@ -71,7 +71,8 @@ def analyze_single(path, CM, rep, *, type_map, prod, stride, args):
     rep.print(f"  mass density: {rho:.4f} g/cc")
 
     # 1) partial g(r) — ALL pairs, including non-bonded (C-N, N-N show avoidance)
-    rep.print(f"\n→ [1/6] partial g(r) ... (jobs={args.jobs})")
+    rep.print(f"\n→ [1/6] partial g(r) ... (jobs={args.jobs}, "
+              f"bin width = {args.rmax/args.nbins:.4f} Å)")
     R = rdf.partial_rdf(traj, pairs=all_pairs, r_max=args.rmax, nbins=args.nbins,
                         n_blocks=args.nblocks, jobs=args.jobs)
     fig, ax = plt.subplots(figsize=(7.5, 4.5))
@@ -84,8 +85,8 @@ def analyze_single(path, CM, rep, *, type_map, prod, stride, args):
                 ls="--" if nb else "-")
         data[f"g_{A}{B}"] = g
         m = rdf.measure_peaks(R["r"], g, search=(0.8, None))
-        rep.print(f"  {A}-{B}{'*' if nb else ' '}: r={m['peak_r']:.3f} Å  "
-                  f"h={m['height']:.2f}  FWHM={m['fwhm']:.3f}")
+        rep.print(f"  {A}-{B}{'*' if nb else ' '}: r={m['peak_r']:.4f} Å  "
+                  f"h={m['height']:.3f}  FWHM={m['fwhm']:.4f}  (fit R²={m['r2']:.3f})")
     ax.set_xlabel("r (Å)"); ax.set_ylabel("g(r)")
     ax.set_title(f"Partial g(r) — {Path(path).stem}  (dashed* = non-bonded)")
     ax.legend(ncol=2); ax.grid(alpha=0.3)
@@ -277,6 +278,8 @@ def main():
     ap.add_argument("--stride", type=int, default=4)
     ap.add_argument("--rmax", type=float, default=8.0)
     ap.add_argument("--nbins", type=int, default=400)
+    ap.add_argument("--bin-width", type=float, default=None,
+                    help="g(r) bin width in Å (overrides --nbins), e.g. 0.005 or 0.001")
     ap.add_argument("--nblocks", type=int, default=5)
     ap.add_argument("--max-ring", type=int, default=9)
     ap.add_argument("--ring-frames", type=int, default=3)
@@ -290,6 +293,8 @@ def main():
     CM = core.CutoffMatrix(cdict or presets.SICN_CUTOFFS, default=0.0)
     tmap = parse_type_map(args.type_map)
     prod = parse_prod(args.prod)
+    if args.bin_width:
+        args.nbins = max(1, round(args.rmax / args.bin_width))
 
     # auto-detect: directory -> sweep, file -> single (unless forced via flags)
     is_sweep = Path(args.path).is_dir() if args.sweep is None else args.sweep

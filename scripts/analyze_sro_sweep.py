@@ -71,6 +71,10 @@ def main():
     ap.add_argument("--stride", type=int, default=4)
     ap.add_argument("--rmax", type=float, default=8.0)
     ap.add_argument("--nbins", type=int, default=400)
+    ap.add_argument("--bin-width", type=float, default=None,
+                    help="g(r) bin width in Å (overrides --nbins). e.g. 0.005 or 0.001. "
+                         "Finer = more detail but noisier per bin; peak r/FWHM come from "
+                         "a Gaussian fit so they stay sub-bin precise regardless.")
     ap.add_argument("--nblocks", type=int, default=5)
     ap.add_argument("--jobs", "-j", type=int, default=0)
     ap.add_argument("--no-boo", action="store_true")
@@ -80,6 +84,8 @@ def main():
 
     CM = core.CutoffMatrix(presets.SICN_CUTOFFS, default=0.0)
     tmap = parse_type_map(args.type_map)
+    if args.bin_width:
+        args.nbins = max(1, round(args.rmax / args.bin_width))
     prod = None
     if args.prod:
         lo, hi = args.prod.split(":")
@@ -96,7 +102,10 @@ def main():
     if not dumps:
         rep.print("no dumps found — check path / filename pattern"); rep.flush(); return
 
-    rep.print(f"\ncomputing full SRO at each temperature (jobs={args.jobs}) ...")
+    rep.print(f"\ng(r): r_max={args.rmax} Å, nbins={args.nbins} "
+              f"→ bin width = {args.rmax/args.nbins:.4f} Å "
+              f"(peak r/FWHM are Gaussian-fit, sub-bin precise)")
+    rep.print(f"computing full SRO at each temperature (jobs={args.jobs}) ...")
     S = sro_sweep.sro_temperature_series(
         dumps, CM, type_map=tmap, prod_range=prod, stride=args.stride,
         n_blocks=args.nblocks, jobs=args.jobs, r_max=args.rmax, nbins=args.nbins,
